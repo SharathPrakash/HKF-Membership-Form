@@ -2,10 +2,11 @@ import React, { useState, useRef, useEffect, useCallback } from 'react';
 import type { IFormData } from './types';
 import TermsAndConditions from './components/TermsAndConditions';
 import logoHKF from './logo/HKF-W.png';
-
 // Declare global variables from CDN scripts for TypeScript
 declare const jspdf: any;
 declare const html2canvas: any;
+
+// const logoHKF = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' fill='%233B82F6'/%3E%3Ctext x='50' y='62' font-size='40' fill='white' text-anchor='middle' font-family='sans-serif' font-weight='bold'%3EHKF%3C/text%3E%3C/svg%3E";
 
 const initialFormData: IFormData = {
   firstName: '',
@@ -30,7 +31,7 @@ const initialFormData: IFormData = {
 
 
 // A static component to render a filled-out version of the form for PDF generation
-const PrintableView: React.FC<{ formData: IFormData; signatureDataUrl: string | null }> = ({ formData, signatureDataUrl }) => {
+const PrintableView: React.FC<{ formData: IFormData; signatureDataUrl: string | null; generatedHkfId: string | null }> = ({ formData, signatureDataUrl, generatedHkfId }) => {
     
     const PrintableField: React.FC<{ label: string; value?: string | null }> = ({ label, value }) => (
         <div className="flex flex-row items-start gap-1 py-0.5">
@@ -50,7 +51,6 @@ const PrintableView: React.FC<{ formData: IFormData; signatureDataUrl: string | 
                         <h1 className="text-xl sm:text-2xl font-bold text-gray-800">Hamburg Kannada Freunde e.V</h1>
                         <p className="text-md text-blue-600 font-semibold">EINTRITTSFORMULAR / Membership Form</p>
                     </div>
-                    {/* <img src="https://picsum.photos/id/111/80/80" alt="Logo" className="w-20 h-20 rounded-full object-cover mt-4 sm:mt-0" /> */}
                     <img src={logoHKF} alt="Logo" className="w-20 h-20 rounded-full object-cover mt-4 sm:mt-0" />
 
                 </header>
@@ -105,6 +105,21 @@ const PrintableView: React.FC<{ formData: IFormData; signatureDataUrl: string | 
                         <p className="text-xs text-gray-500 mt-1">Signature should be from the SEPA mandate owner.</p>
                     </section>
                 </main>
+                {generatedHkfId && (
+                    <footer className="mt-6 pt-4 border-t-2 border-dashed border-gray-400 flex flex-col items-center">
+                        <div>
+                            <p className="inline-block align-middle text-lg font-bold text-gray-800 mr-3">
+                                Your Registration Number is:
+                            </p>
+                            <span className="inline-block align-middle bg-red-100 text-red-700 text-2xl font-bold font-mono tracking-wider px-4 py-1 rounded-md shadow-sm">
+                                {generatedHkfId}
+                            </span>
+                        </div>
+                        <p className="text-xs text-gray-600 mt-2">
+                            Please use this number for all future communications with us.
+                        </p>
+                    </footer>
+                )}
             </div>
             <div id="printable-terms-container">
                 <TermsAndConditions />
@@ -193,6 +208,8 @@ const App: React.FC = () => {
   const [signatureMode, setSignatureMode] = useState<'draw' | 'upload'>('draw');
   const [uploadedSignature, setUploadedSignature] = useState<string | null>(null);
   const [printableSignature, setPrintableSignature] = useState<string | null>(null);
+  const [generatedHkfId, setGeneratedHkfId] = useState<string | null>(null);
+
 
   const signatureCanvasRef = useRef<HTMLCanvasElement>(null);
   const isDrawing = useRef(false);
@@ -398,7 +415,6 @@ const App: React.FC = () => {
       return;
     }
       
-    // 1. Run full validation to display all errors to the user.
     if (!validateForm()) {
         setTimeout(() => {
             const firstErrorField = document.querySelector('.border-red-500, .outline-red-500');
@@ -422,8 +438,8 @@ const App: React.FC = () => {
     }
 
     setIsProcessing(true);
+    let hkfId: string | null = null;
     
-    // 2. Save data to the backend
     try {
         setStatusMessage('Saving application to database...');
         const response = await fetch('https://hamburgkannadamitraru.com/api/submit-form.php', {
@@ -434,12 +450,14 @@ const App: React.FC = () => {
             body: JSON.stringify({ ...formData, signatureDataUrl }),
         });
 
-        if (!response.ok) {
-            const errorData = await response.json();
-            throw new Error(errorData.message || 'Failed to save form data.');
+        const responseData = await response.json();
+
+        if (!response.ok || !responseData.success) {
+            throw new Error(responseData.message || 'Failed to save form data.');
         }
 
-        // Data saved successfully, now generate PDF
+        hkfId = responseData.hkfId || null;
+        setGeneratedHkfId(hkfId);
         setStatusMessage('Data saved successfully! Generating PDF...');
 
     } catch (error) {
@@ -453,13 +471,11 @@ const App: React.FC = () => {
         alert(`Could not save your application. Please try again.\n\nError: ${errorMessage}`);
         setIsProcessing(false);
         setStatusMessage('');
-        return; // Stop the process if saving fails
+        return;
     }
     
-    // 3. Generate PDF
     setPrintableSignature(signatureDataUrl);
     
-    // Allow React to render the printable view before capturing
     setTimeout(async () => {
         const formContent = document.getElementById('printable-form-content');
         const termsContent = document.getElementById('printable-terms-container');
@@ -468,6 +484,7 @@ const App: React.FC = () => {
             console.error("Printable content not found.");
             setIsProcessing(false);
             setPrintableSignature(null);
+            setGeneratedHkfId(null);
             return;
         }
         
@@ -477,38 +494,36 @@ const App: React.FC = () => {
             const pdfWidth = pdf.internal.pageSize.getWidth();
             const pageHeight = pdf.internal.pageSize.getHeight();
 
-            // --- Process Form Content ---
-            const formCanvas = await html2canvas(formContent, { scale: 2, useCORS: true });
-            const formImgData = formCanvas.toDataURL('image/png');
+            const formCanvas = await html2canvas(formContent, { scale: 1.5, useCORS: true });
+            const formImgData = formCanvas.toDataURL('image/jpeg', 0.8);
             const formImgHeight = (formCanvas.height * pdfWidth) / formCanvas.width;
             
             let formHeightLeft = formImgHeight;
             let position = 0;
-            pdf.addImage(formImgData, 'PNG', 0, position, pdfWidth, formImgHeight);
+            pdf.addImage(formImgData, 'JPEG', 0, position, pdfWidth, formImgHeight);
             formHeightLeft -= pageHeight;
             
             while (formHeightLeft > 0) {
                 position -= pageHeight;
                 pdf.addPage();
-                pdf.addImage(formImgData, 'PNG', 0, position, pdfWidth, formImgHeight);
+                pdf.addImage(formImgData, 'JPEG', 0, position, pdfWidth, formImgHeight);
                 formHeightLeft -= pageHeight;
             }
 
-            // --- Process Terms Content ---
             pdf.addPage();
-            const termsCanvas = await html2canvas(termsContent, { scale: 2, useCORS: true });
-            const termsImgData = termsCanvas.toDataURL('image/png');
+            const termsCanvas = await html2canvas(termsContent, { scale: 1.5, useCORS: true });
+            const termsImgData = termsCanvas.toDataURL('image/jpeg', 0.8);
             const termsImgHeight = (termsCanvas.height * pdfWidth) / termsCanvas.width;
 
             let termsHeightLeft = termsImgHeight;
-            position = 0; // Reset position for the new page
-            pdf.addImage(termsImgData, 'PNG', 0, position, pdfWidth, termsImgHeight);
+            position = 0;
+            pdf.addImage(termsImgData, 'JPEG', 0, position, pdfWidth, termsImgHeight);
             termsHeightLeft -= pageHeight;
 
             while (termsHeightLeft > 0) {
                 position -= pageHeight;
                 pdf.addPage();
-                pdf.addImage(termsImgData, 'PNG', 0, position, pdfWidth, termsImgHeight);
+                pdf.addImage(termsImgData, 'JPEG', 0, position, pdfWidth, termsImgHeight);
                 termsHeightLeft -= pageHeight;
             }
     
@@ -521,13 +536,14 @@ const App: React.FC = () => {
           setIsProcessing(false);
           setStatusMessage('');
           setPrintableSignature(null);
+          setGeneratedHkfId(null);
         }
     }, 100);
   };
 
   return (
     <>
-      {isProcessing && <PrintableView formData={formData} signatureDataUrl={printableSignature} />}
+      {isProcessing && <PrintableView formData={formData} signatureDataUrl={printableSignature} generatedHkfId={generatedHkfId}/>}
       <div className="min-h-screen bg-gray-100 p-4">
         <div className="max-w-4xl mx-auto text-sm">
           <div id="pdf-content-area">
@@ -537,7 +553,6 @@ const App: React.FC = () => {
                   <h1 className="text-xl sm:text-2xl font-bold text-gray-800">Hamburg Kannada Freunde e.V</h1>
                   <p className="text-md text-blue-600 font-semibold">EINTRITTSFORMULAR / Membership Form</p>
                 </div>
-                {/* <img src="https://picsum.photos/id/111/80/80" alt="Logo" className="w-20 h-20 rounded-full object-cover mt-4 sm:mt-0" /> */}
                 <img src={logoHKF} alt="Logo" className="w-20 h-20 rounded-full object-cover mt-4 sm:mt-0" />
               </header>
 
@@ -693,11 +708,6 @@ const App: React.FC = () => {
                 © {new Date().getFullYear()} Hamburg Kannada Freunde e.V.
             </div>
         </footer>
-
- {/* <footer className="text-center text-xs text-gray-500 mt-6 pb-4">
-              <p>Hamburg Kannada Freunde e.V. | Emmi-Ruben-Weg 17B, 21147 Hamburg</p>
-              <p>contact@hamburgkannadamitraru.com | www.hamburgkannadamitraru.com</p>
-          </footer> */}
 
         </div>
       </div>
