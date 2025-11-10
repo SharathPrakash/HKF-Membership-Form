@@ -1,6 +1,7 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import type { IFormData } from './types';
 import TermsAndConditions from './components/TermsAndConditions';
+import logoHKF from './logo/HKF-W.png';
 
 // Declare global variables from CDN scripts for TypeScript
 declare const jspdf: any;
@@ -49,7 +50,9 @@ const PrintableView: React.FC<{ formData: IFormData; signatureDataUrl: string | 
                         <h1 className="text-xl sm:text-2xl font-bold text-gray-800">Hamburg Kannada Freunde e.V</h1>
                         <p className="text-md text-blue-600 font-semibold">EINTRITTSFORMULAR / Membership Form</p>
                     </div>
-                    <img src="https://picsum.photos/id/111/80/80" alt="Logo" className="w-20 h-20 rounded-full object-cover mt-4 sm:mt-0" />
+                    {/* <img src="https://picsum.photos/id/111/80/80" alt="Logo" className="w-20 h-20 rounded-full object-cover mt-4 sm:mt-0" /> */}
+                    <img src={logoHKF} alt="Logo" className="w-20 h-20 rounded-full object-cover mt-4 sm:mt-0" />
+
                 </header>
 
                 <main className="pt-3 space-y-3">
@@ -87,10 +90,12 @@ const PrintableView: React.FC<{ formData: IFormData; signatureDataUrl: string | 
                     <section className="space-y-1 p-3 border border-gray-200 rounded-lg">
                         <h3 className="text-lg font-bold text-gray-700 border-b pb-1 mb-1.5">Signature (Unterschrift)</h3>
                         <div className="flex flex-row items-start gap-1">
-                            <div className="flex-1">
-                                <p className="font-semibold text-gray-700">Entry Date (Eintrittsdatum):</p>
-                                <p className="p-1.5 text-sm">{formData.entryDate}</p>
+                            <div className="w-full sm:w-1/2 flex-1 flex flex-col">
+                            <label className="font-semibold text-gray-700 mb-2">Entry Date (Eintrittsdatum):</label>
+                            <div className="p-2 text-sm border border-gray-300 rounded-md bg-gray-50 text-gray-800 w-1/2">
+                                {formData.entryDate}
                             </div>
+                        </div>
                             <div className="flex-1">
                                 {signatureDataUrl ? 
                                     <img src={signatureDataUrl} alt="Signature" style={{width: '400px', height: '80px', border: '1px solid #d1d5db', borderRadius: '0.375rem', objectFit: 'contain'}}/> 
@@ -131,7 +136,7 @@ const FormField: React.FC<{ label: string; name: string; value: string; onChange
                         value={value}
                         onChange={onChange}
                         placeholder={placeholder || label}
-                        className={`w-full p-1.5 text-sm border rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition bg-white text-black ${error ? 'border-red-500' : 'border-gray-300'} ${type === 'date' ? 'pr-8' : ''}`}
+                        className={`w-full p-1.5 text-sm border rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition bg-white text-black ${error ? 'border-red-500' : 'border-gray-300'} ${type === 'date' ? 'pr-2' : ''}`}
                     />
                     {type === 'date' && (
                         <div onClick={handleIconClick} className="absolute inset-y-0 right-0 flex items-center pr-2 cursor-pointer">
@@ -431,7 +436,8 @@ const App: React.FC = () => {
                   <h1 className="text-xl sm:text-2xl font-bold text-gray-800">Hamburg Kannada Freunde e.V</h1>
                   <p className="text-md text-blue-600 font-semibold">EINTRITTSFORMULAR / Membership Form</p>
                 </div>
-                <img src="https://picsum.photos/id/111/80/80" alt="Logo" className="w-20 h-20 rounded-full object-cover mt-4 sm:mt-0" />
+                {/* <img src="https://picsum.photos/id/111/80/80" alt="Logo" className="w-20 h-20 rounded-full object-cover mt-4 sm:mt-0" /> */}
+                <img src={logoHKF} alt="Logo" className="w-25 h-20 rounded-full object-cover mt-4 sm:mt-0" />
               </header>
 
               <main className="pt-3 space-y-3">
@@ -472,10 +478,12 @@ const App: React.FC = () => {
                 <section className="space-y-1 p-3 border border-gray-200 rounded-lg">
                     <h3 className="text-lg font-bold text-gray-700 border-b pb-1 mb-1.5">Signature (Unterschrift)</h3>
                     <div className="flex flex-col sm:flex-row sm:items-start sm:gap-1">
-                         <div className="w-full sm:w-1/2 flex-1">
-                             <p className="font-semibold text-gray-700">Entry Date (Eintrittsdatum):</p>
-                             <p className="p-1.5 text-sm">{formData.entryDate}</p>
-                         </div>
+                        <div className="w-full sm:w-1/2 flex-1 flex flex-col">
+                            <label className="font-semibold text-gray-700 mb-2">Entry Date (Eintrittsdatum):</label>
+                             <div className="p-2 text-sm border border-gray-300 rounded-md bg-gray-50 text-gray-800 w-1/2">
+                                {formData.entryDate}
+                            </div>
+                        </div>
                         <div className="w-full sm:w-1/2 flex-1">
                             <div className="flex border-b">
                                 <button onClick={() => setSignatureMode('draw')} className={`px-4 py-2 text-sm font-semibold w-1/2 rounded-t-lg ${signatureMode === 'draw' ? 'bg-blue-500 text-white' : 'bg-gray-200 text-gray-700'}`}>Draw Signature</button>
@@ -529,10 +537,59 @@ const App: React.FC = () => {
                {!isSigned && <p className="text-red-500 text-sm font-semibold">Signature is required to generate PDF.</p>}
           </div>
           
-          <footer className="text-center text-xs text-gray-500 mt-6 pb-4">
+        <footer className="mt-6 pt-4 border-t border-gray-200 text-sm text-gray-700">
+            <div className="max-w-4xl mx-auto flex flex-col md:flex-row justify-between items-start gap-6">
+                <div className="flex-1 min-w-0">
+                    <h4 className="font-semibold text-gray-800">Contact</h4>
+                    <address className="not-italic mt-2 space-y-1 text-gray-600">
+                        <div className="font-medium text-gray-700">Hamburg Kannada Freunde e.V.</div>
+                        <div>Emmi-Ruben-Weg 17B, 21147 Hamburg</div>
+                        <div>
+                            Email:{" "}
+                            <a
+                                href="mailto:contact@hamburgkannadamitraru.com"
+                                className="text-blue-600 hover:underline"
+                            >
+                                contact@hamburgkannadamitraru.com
+                            </a>
+                        </div>
+                        <div>
+                            Website:{" "}
+                            <a
+                                href="https://www.hamburgkannadamitraru.com"
+                                target="_blank"
+                                rel="noreferrer"
+                                className="text-blue-600 hover:underline"
+                            >
+                                www.hamburgkannadamitraru.com
+                            </a>
+                        </div>
+                    </address>
+                </div>
+
+                <div className="flex-2 min-w-0">
+                    <h4 className="font-semibold text-gray-800">Bank Details</h4>
+                    <div className="mt-2 space-y-1 text-gray-600">
+                        <div className="font-medium text-gray-700">Hamburger Sparkasse (HASPA)</div>
+                        <div>
+                            IBAN: <span className="font-mono bg-gray-50 px-2 py-0.5 rounded text-sm">DE73 2005 0550 1506 4113 37</span>
+                        </div>
+                        <div>
+                            BIC: <span className="font-mono bg-gray-50 px-2 py-0.5 rounded text-sm">HASPDEHHXXX</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div className="max-w-4xl mx-auto mt-4 text-center text-xs text-gray-400">
+                © {new Date().getFullYear()} Hamburg Kannada Freunde e.V.
+            </div>
+        </footer>
+
+ {/* <footer className="text-center text-xs text-gray-500 mt-6 pb-4">
               <p>Hamburg Kannada Freunde e.V. | Emmi-Ruben-Weg 17B, 21147 Hamburg</p>
               <p>contact@hamburgkannadamitraru.com | www.hamburgkannadamitraru.com</p>
-          </footer>
+          </footer> */}
 
         </div>
       </div>
