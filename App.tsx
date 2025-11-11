@@ -2,10 +2,7 @@ import React, { useState, useRef, useEffect, useCallback } from 'react';
 import type { IFormData } from './types';
 import TermsAndConditions from './components/TermsAndConditions';
 import logoHKF from './logo/HKF-W.png';
-
-// Declare global variables from CDN scripts for TypeScript
-declare const jspdf: any;
-declare const html2canvas: any;
+// const logoHKF = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' fill='%233B82F6'/%3E%3Ctext x='50' y='62' font-size='40' fill='white' text-anchor='middle' font-family='sans-serif' font-weight='bold'%3EHKF%3C/text%3E%3C/svg%3E";
 
 const initialFormData: IFormData = {
   firstName: '',
@@ -26,91 +23,6 @@ const initialFormData: IFormData = {
   sepaCity: '',
   iban: '',
   sepaEntryDate: new Date().toISOString().split('T')[0],
-};
-
-
-// A static component to render a filled-out version of the form for PDF generation
-const PrintableView: React.FC<{ formData: IFormData; signatureDataUrl: string | null }> = ({ formData, signatureDataUrl }) => {
-    
-    const PrintableField: React.FC<{ label: string; value?: string | null }> = ({ label, value }) => (
-        <div className="flex flex-row items-start gap-1 py-0.5">
-            <p className="w-36 font-semibold text-gray-700 flex-shrink-0">{label}:</p>
-            <div className="flex-1 p-1.5 text-sm border rounded-md bg-white text-black min-h-[30px] flex items-center">{value || ''}</div>
-        </div>
-    );
-    
-    const getGenderLabel = (value: string) => ({'male': 'Männlich (Male)', 'female': 'Weiblich (Female)'}[value] || '');
-    const getSepaGenderLabel = (value: string) => ({'male': 'Male', 'female': 'Female', 'diverse': 'Diverse', 'none': 'No Answer', 'institution': 'Institution'}[value] || '');
-
-    return (
-        <div id="printable-container" style={{ position: 'absolute', left: '-9999px', top: 0, width: '896px' /* max-w-4xl */, fontSize: '14px' }}>
-            <div id="printable-form-content" className="bg-white p-4 sm:p-5">
-                <header className="flex flex-col sm:flex-row justify-between items-center pb-2 border-b-2 border-gray-200">
-                    <div className="text-center sm:text-left">
-                        <h1 className="text-xl sm:text-2xl font-bold text-gray-800">Hamburg Kannada Freunde e.V</h1>
-                        <p className="text-md text-blue-600 font-semibold">EINTRITTSFORMULAR / Membership Form</p>
-                    </div>
-                    {/* <img src="https://picsum.photos/id/111/80/80" alt="Logo" className="w-20 h-20 rounded-full object-cover mt-4 sm:mt-0" /> */}
-                    <img src={logoHKF} alt="Logo" className="w-20 h-20 rounded-full object-cover mt-4 sm:mt-0" />
-
-                </header>
-
-                <main className="pt-3 space-y-3">
-                    <section className="space-y-1.5 p-3 border border-gray-200 rounded-lg">
-                        <h3 className="text-lg font-bold text-gray-700 border-b pb-1 mb-1.5">Personal Details (Bitte in Druckbuchstaben ausfüllen)</h3>
-                        <PrintableField label="First Name (Vorname)" value={formData.firstName} />
-                        <PrintableField label="Last Name (Nachname)" value={formData.lastName} />
-                        <PrintableField label="Date of Birth (Geburtsdatum)" value={formData.dob} />
-                        <PrintableField label="Gender (Geschlecht)" value={getGenderLabel(formData.gender)} />
-                        <PrintableField label="Address (Adresse)" value={formData.address} />
-                        <div className="grid grid-cols-2 gap-x-2">
-                            <PrintableField label="Postal Code" value={formData.postalCode} />
-                            <PrintableField label="City (Ort)" value={formData.city} />
-                        </div>
-                        <PrintableField label="Phone (Tel./Handy)" value={formData.phone} />
-                        <PrintableField label="E-Mail" value={formData.email} />
-                    </section>
-
-                    <section className="space-y-2 p-4 bg-gray-50 border-2 border-gray-300 rounded-lg">
-                        <h3 className="text-xl font-bold text-center text-gray-800">SEPA-Lastschriftmandat (SEPA Direct Debit Mandate)</h3>
-                        <p className="text-xs text-gray-600">Hiermit ermächtige ich den Hamburg Kannada Freunde e.V., den Mitgliedsbeitrag von meinem unten angegebenen Konto per Lastschrift einzuziehen. / I hereby authorize Hamburg Kannada Freunde e.V. to collect the membership fee from my account specified below via direct debit.</p>
-                        <div className="space-y-1.5">
-                            <PrintableField label="Gender" value={getSepaGenderLabel(formData.sepaGender)} />
-                            <PrintableField label="First Name (Vorname)" value={formData.sepaFirstName} />
-                            <PrintableField label="Last Name (Nachname)" value={formData.sepaLastName} />
-                            <PrintableField label="Address (Adresse)" value={formData.sepaAddress} />
-                            <div className="grid grid-cols-2 gap-x-2">
-                                <PrintableField label="Postal Code" value={formData.sepaPostalCode} />
-                                <PrintableField label="City (Ort)" value={formData.sepaCity} />
-                            </div>
-                            <PrintableField label="IBAN" value={formData.iban} />
-                        </div>
-                    </section>
-                    
-                    <section className="space-y-1 p-3 border border-gray-200 rounded-lg">
-                        <h3 className="text-lg font-bold text-gray-700 border-b pb-1 mb-1.5">Signature (Unterschrift)</h3>
-                        <div className="flex flex-row items-start gap-1">
-                            <div className="w-full sm:w-1/2 flex-1 flex flex-col">
-                            <label className="font-semibold text-gray-700 mb-2">Entry Date (Eintrittsdatum):</label>
-                            <div className="p-2 text-sm border border-gray-300 rounded-md bg-gray-50 text-gray-800 w-1/2">
-                                {formData.entryDate}
-                            </div>
-                        </div>
-                            <div className="flex-1">
-                                {signatureDataUrl ? 
-                                    <img src={signatureDataUrl} alt="Signature" style={{width: '400px', height: '80px', border: '1px solid #d1d5db', borderRadius: '0.375rem', objectFit: 'contain'}}/> 
-                                    : <div style={{width: '400px', height: '80px', border: '1px solid #d1d5db', borderRadius: '0.375rem'}}></div>}
-                            </div>
-                        </div>
-                        <p className="text-xs text-gray-500 mt-1">Signature should be from the SEPA mandate owner.</p>
-                    </section>
-                </main>
-            </div>
-            <div id="printable-terms-container">
-                <TermsAndConditions />
-            </div>
-        </div>
-    );
 };
 
 
@@ -189,10 +101,10 @@ const App: React.FC = () => {
   const [isSigned, setIsSigned] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
   const [statusMessage, setStatusMessage] = useState('');
+  const [submissionSuccess, setSubmissionSuccess] = useState(false);
   const [isFormCompleteAndValid, setIsFormCompleteAndValid] = useState(false);
   const [signatureMode, setSignatureMode] = useState<'draw' | 'upload'>('draw');
   const [uploadedSignature, setUploadedSignature] = useState<string | null>(null);
-  const [printableSignature, setPrintableSignature] = useState<string | null>(null);
 
   const signatureCanvasRef = useRef<HTMLCanvasElement>(null);
   const isDrawing = useRef(false);
@@ -241,7 +153,6 @@ const App: React.FC = () => {
     
     setFormData(prev => ({ ...prev, [name]: formattedValue }));
 
-    // Validate on change to clear errors
     if (errors[name]) {
         const error = validateField(name, formattedValue);
         setErrors(prev => ({ ...prev, [name]: error }));
@@ -369,21 +280,25 @@ const App: React.FC = () => {
     }
     
     setErrors(newErrors);
-    return Object.keys(newErrors).length === 0;
+    if (Object.keys(newErrors).length > 0) {
+        setTimeout(() => {
+            const firstErrorField = document.querySelector('.border-red-500, .outline-red-500');
+            firstErrorField?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }, 100);
+        return false;
+    }
+    return true;
   }, [formData, validateField]);
 
-  // Real-time check for button state without setting errors for the user
   const checkFormValidity = useCallback(() => {
     const fieldsToValidate: Array<keyof IFormData> = [
         'firstName', 'lastName', 'dob', 'gender', 'address', 'postalCode', 'city', 'phone', 'email',
         'sepaGender', 'sepaFirstName', 'sepaLastName', 'sepaAddress', 'sepaPostalCode', 'sepaCity', 'iban'
     ];
     for (const key of fieldsToValidate) {
-        if (validateField(key, formData[key])) {
-            return false; // Found an error, form is not valid
-        }
+        if (validateField(key, formData[key])) return false;
     }
-    return true; // No errors found
+    return true;
   }, [formData, validateField]);
 
   useEffect(() => {
@@ -391,23 +306,8 @@ const App: React.FC = () => {
   }, [formData, checkFormValidity]);
 
 
-  const handleDownloadPdf = async () => {
-    if (typeof jspdf === 'undefined' || typeof html2canvas === 'undefined') {
-      console.error("PDF generation libraries not loaded.");
-      alert("Error: PDF libraries could not be loaded. Please check your internet connection and try again.");
-      return;
-    }
-      
-    // 1. Run full validation to display all errors to the user.
-    if (!validateForm()) {
-        setTimeout(() => {
-            const firstErrorField = document.querySelector('.border-red-500, .outline-red-500');
-            if (firstErrorField) {
-                firstErrorField.scrollIntoView({ behavior: 'smooth', block: 'center' });
-            }
-        }, 100);
-        return;
-    }
+  const handleSubmitApplication = async () => {
+    if (!validateForm()) return;
     
     let signatureDataUrl: string | null = null;
     if (signatureMode === 'draw' && !isCanvasBlank()) {
@@ -417,117 +317,71 @@ const App: React.FC = () => {
     }
 
     if (!signatureDataUrl) {
-      alert("Please provide a signature before generating the PDF.");
+      alert("Please provide a signature before submitting.");
       return;
     }
 
     setIsProcessing(true);
+    setStatusMessage('Submitting application... This may take a moment.');
     
-    // 2. Save data to the backend
     try {
-        setStatusMessage('Saving application to database...');
-        const response = await fetch('https://hamburgkannadamitraru.com/api/submit-form.php', {
+        const response = await fetch('/api/submit-form', {
             method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-            },
+            headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ ...formData, signatureDataUrl }),
         });
 
-        if (!response.ok) {
-            const errorData = await response.json();
-            throw new Error(errorData.message || 'Failed to save form data.');
+        const responseData = await response.json();
+
+        if (!response.ok || !responseData.success) {
+            throw new Error(responseData.message || 'Failed to save form data.');
         }
 
-        // Data saved successfully, now generate PDF
-        setStatusMessage('Data saved successfully! Generating PDF...');
+        setSubmissionSuccess(true);
+        setStatusMessage(responseData.message);
 
     } catch (error) {
         console.error("Submission Error:", error);
-        let errorMessage = 'An unknown error occurred while saving the application.';
-        if (error instanceof TypeError && error.message === 'Failed to fetch') {
-            errorMessage = 'Connection to the server failed. This is likely a CORS (Cross-Origin) issue. Please ensure the backend server is correctly configured to accept requests from this website.';
-        } else if (error instanceof Error) {
+        let errorMessage = 'An unknown error occurred. Please try again.';
+        if (error instanceof Error) {
             errorMessage = error.message;
         }
-        alert(`Could not save your application. Please try again.\n\nError: ${errorMessage}`);
-        setIsProcessing(false);
+        alert(`Could not submit your application.\n\nError: ${errorMessage}`);
         setStatusMessage('');
-        return; // Stop the process if saving fails
+    } finally {
+        setIsProcessing(false);
     }
-    
-    // 3. Generate PDF
-    setPrintableSignature(signatureDataUrl);
-    
-    // Allow React to render the printable view before capturing
-    setTimeout(async () => {
-        const formContent = document.getElementById('printable-form-content');
-        const termsContent = document.getElementById('printable-terms-container');
-
-        if (!formContent || !termsContent) {
-            console.error("Printable content not found.");
-            setIsProcessing(false);
-            setPrintableSignature(null);
-            return;
-        }
-        
-        try {
-            const { jsPDF } = jspdf;
-            const pdf = new jsPDF({ orientation: 'p', unit: 'mm', format: 'a4' });
-            const pdfWidth = pdf.internal.pageSize.getWidth();
-            const pageHeight = pdf.internal.pageSize.getHeight();
-
-            // --- Process Form Content ---
-            const formCanvas = await html2canvas(formContent, { scale: 2, useCORS: true });
-            const formImgData = formCanvas.toDataURL('image/png');
-            const formImgHeight = (formCanvas.height * pdfWidth) / formCanvas.width;
-            
-            let formHeightLeft = formImgHeight;
-            let position = 0;
-            pdf.addImage(formImgData, 'PNG', 0, position, pdfWidth, formImgHeight);
-            formHeightLeft -= pageHeight;
-            
-            while (formHeightLeft > 0) {
-                position -= pageHeight;
-                pdf.addPage();
-                pdf.addImage(formImgData, 'PNG', 0, position, pdfWidth, formImgHeight);
-                formHeightLeft -= pageHeight;
-            }
-
-            // --- Process Terms Content ---
-            pdf.addPage();
-            const termsCanvas = await html2canvas(termsContent, { scale: 2, useCORS: true });
-            const termsImgData = termsCanvas.toDataURL('image/png');
-            const termsImgHeight = (termsCanvas.height * pdfWidth) / termsCanvas.width;
-
-            let termsHeightLeft = termsImgHeight;
-            position = 0; // Reset position for the new page
-            pdf.addImage(termsImgData, 'PNG', 0, position, pdfWidth, termsImgHeight);
-            termsHeightLeft -= pageHeight;
-
-            while (termsHeightLeft > 0) {
-                position -= pageHeight;
-                pdf.addPage();
-                pdf.addImage(termsImgData, 'PNG', 0, position, pdfWidth, termsImgHeight);
-                termsHeightLeft -= pageHeight;
-            }
-    
-            pdf.save('HKF_Membership_Application.pdf');
-    
-        } catch (error) {
-          console.error("Error generating PDF:", error);
-          alert("Failed to generate PDF. Please try again.");
-        } finally {
-          setIsProcessing(false);
-          setStatusMessage('');
-          setPrintableSignature(null);
-        }
-    }, 100);
   };
+  
+  const resetForm = () => {
+      setFormData(initialFormData);
+      setErrors({});
+      clearSignature();
+      setSubmissionSuccess(false);
+      setStatusMessage('');
+  };
+
+  if (submissionSuccess) {
+    return (
+        <div className="min-h-screen bg-gray-100 flex items-center justify-center p-4">
+            <div className="max-w-xl mx-auto bg-white p-8 rounded-lg shadow-md text-center">
+                 <svg className="w-16 h-16 mx-auto text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                <h2 className="text-2xl font-bold text-gray-800 mt-4">Thank You!</h2>
+                <p className="text-gray-600 mt-2">{statusMessage}</p>
+                <p className="text-gray-600 mt-1">A completed copy of your application has been sent to your email address for your records.</p>
+                <button
+                    onClick={resetForm}
+                    className="mt-6 px-6 py-2 bg-blue-600 text-white font-bold rounded-lg shadow-md hover:bg-blue-700"
+                >
+                    Submit Another Application
+                </button>
+            </div>
+        </div>
+    );
+  }
 
   return (
     <>
-      {isProcessing && <PrintableView formData={formData} signatureDataUrl={printableSignature} />}
       <div className="min-h-screen bg-gray-100 p-4">
         <div className="max-w-4xl mx-auto text-sm">
           <div id="pdf-content-area">
@@ -537,7 +391,6 @@ const App: React.FC = () => {
                   <h1 className="text-xl sm:text-2xl font-bold text-gray-800">Hamburg Kannada Freunde e.V</h1>
                   <p className="text-md text-blue-600 font-semibold">EINTRITTSFORMULAR / Membership Form</p>
                 </div>
-                {/* <img src="https://picsum.photos/id/111/80/80" alt="Logo" className="w-20 h-20 rounded-full object-cover mt-4 sm:mt-0" /> */}
                 <img src={logoHKF} alt="Logo" className="w-20 h-20 rounded-full object-cover mt-4 sm:mt-0" />
               </header>
 
@@ -619,7 +472,7 @@ const App: React.FC = () => {
           
           <div className="mt-4 flex flex-col sm:flex-row justify-center items-center gap-4">
               <button
-                  onClick={handleDownloadPdf}
+                  onClick={handleSubmitApplication}
                   disabled={isProcessing || !isSigned || !isFormCompleteAndValid}
                   className="w-full sm:w-auto px-6 py-2 bg-blue-600 text-white font-bold rounded-lg shadow-md hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-all duration-300 transform hover:scale-105 flex items-center justify-center gap-2"
               >
@@ -632,7 +485,7 @@ const App: React.FC = () => {
                           {statusMessage || 'Processing...'}
                       </>
                   ) : (
-                      'Save Application & Download PDF'
+                      'Submit Application'
                   )}
               </button>
               {!isProcessing && (!isFormCompleteAndValid || !isSigned) && (
@@ -693,11 +546,6 @@ const App: React.FC = () => {
                 © {new Date().getFullYear()} Hamburg Kannada Freunde e.V.
             </div>
         </footer>
-
- {/* <footer className="text-center text-xs text-gray-500 mt-6 pb-4">
-              <p>Hamburg Kannada Freunde e.V. | Emmi-Ruben-Weg 17B, 21147 Hamburg</p>
-              <p>contact@hamburgkannadamitraru.com | www.hamburgkannadamitraru.com</p>
-          </footer> */}
 
         </div>
       </div>
