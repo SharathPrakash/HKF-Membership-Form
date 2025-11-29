@@ -2,7 +2,11 @@ import React, { useState, useRef, useEffect, useCallback } from 'react';
 import type { IFormData } from './types';
 import TermsAndConditions from './components/TermsAndConditions';
 import logoHKF from './logo/HKF-W.png';
-// const logoHKF = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' fill='%233B82F6'/%3E%3Ctext x='50' y='62' font-size='40' fill='white' text-anchor='middle' font-family='sans-serif' font-weight='bold'%3EHKF%3C/text%3E%3C/svg%3E";
+ // const logoHKF = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' fill='%233B82F6'/%3E%3Ctext x='50' y='62' font-size='40' fill='white' text-anchor='middle' font-family='sans-serif' font-weight='bold'%3EHKF%3C/text%3E%3C/svg%3E";
+
+// Declare global variables from CDN scripts for TypeScript
+declare const jspdf: any;
+declare const html2canvas: any;
 
 const initialFormData: IFormData = {
   firstName: '',
@@ -26,14 +30,125 @@ const initialFormData: IFormData = {
 };
 
 
-const FormField: React.FC<{ label: string; name: string; value: string; onChange: (e: React.ChangeEvent<HTMLInputElement>) => void; placeholder?: string; type?: string; error?: string; required?: boolean; }> = ({ label, name, value, onChange, placeholder, type = 'text', error, required }) => {
+// A static component to render a filled-out version of the form for PDF generation
+const PrintableView: React.FC<{ formData: IFormData; signatureDataUrl: string | null }> = ({ formData, signatureDataUrl }) => {
+    
+    const PrintableField: React.FC<{ label: string; value?: string | null }> = ({ label, value }) => (
+        <div className="flex flex-row items-start gap-1 py-0.5">
+            <p className="w-36 font-semibold text-gray-700 flex-shrink-0">{label}:</p>
+            <div className="flex-1 p-1.5 text-sm border rounded-md bg-white text-black min-h-[30px] flex items-center">{value || ''}</div>
+        </div>
+    );
+    
+    const getGenderLabel = (value: string) => ({'male': 'Männlich (Male)', 'female': 'Weiblich (Female)'}[value] || '');
+    const getSepaGenderLabel = (value: string) => ({'male': 'Male', 'female': 'Female', 'diverse': 'Diverse', 'none': 'No Answer', 'institution': 'Institution'}[value] || '');
+
+    return (
+        <div id="printable-container" style={{ position: 'absolute', left: '-9999px', top: 0, width: '896px' /* max-w-4xl */, fontSize: '14px' }}>
+            <div id="printable-form-content" className="bg-white p-4 sm:p-5">
+                <header className="flex flex-col sm:flex-row justify-between items-center pb-2 border-b-2 border-gray-200">
+                    <div className="text-center sm:text-left">
+                        <h1 className="text-xl sm:text-2xl font-bold text-gray-800">Hamburg Kannada Freunde e.V</h1>
+                        <p className="text-md text-blue-600 font-semibold">EINTRITTSFORMULAR / Membership Form</p>
+                    </div>
+                    {/* <img src="https://picsum.photos/id/111/80/80" alt="Logo" className="w-20 h-20 rounded-full object-cover mt-4 sm:mt-0" /> */}
+                    <img src={logoHKF} alt="Logo" className="w-20 h-20 rounded-full object-cover mt-4 sm:mt-0" />
+
+                </header>
+
+                <main className="pt-3 space-y-3">
+                    <section className="space-y-1.5 p-3 border border-gray-200 rounded-lg">
+                        <h3 className="text-lg font-bold text-gray-700 border-b pb-1 mb-1.5">Personal Details (Bitte in Druckbuchstaben ausfüllen)</h3>
+                        <PrintableField label="First Name (Vorname)" value={formData.firstName} />
+                        <PrintableField label="Last Name (Nachname)" value={formData.lastName} />
+                        <PrintableField label="Date of Birth (Geburtsdatum)" value={formData.dob} />
+                        <PrintableField label="Gender (Geschlecht)" value={getGenderLabel(formData.gender)} />
+                        <PrintableField label="Address (Adresse)" value={formData.address} />
+                        <div className="grid grid-cols-2 gap-x-2">
+                            <PrintableField label="Postal Code" value={formData.postalCode} />
+                            <PrintableField label="City (Ort)" value={formData.city} />
+                        </div>
+                        <PrintableField label="Phone (Tel./Handy)" value={formData.phone} />
+                        <PrintableField label="E-Mail" value={formData.email} />
+                    </section>
+
+                    <section className="space-y-2 p-4 bg-gray-50 border-2 border-gray-300 rounded-lg">
+                        <h3 className="text-xl font-bold text-center text-gray-800">SEPA-Lastschriftmandat (SEPA Direct Debit Mandate)</h3>
+                        <p className="text-xs text-gray-600">Hiermit ermächtige ich den Hamburg Kannada Freunde e.V., den Mitgliedsbeitrag von meinem unten angegebenen Konto per Lastschrift einzuziehen. / I hereby authorize Hamburg Kannada Freunde e.V. to collect the membership fee from my account specified below via direct debit.</p>
+                        <div className="space-y-1.5">
+                            <PrintableField label="Gender" value={getSepaGenderLabel(formData.sepaGender)} />
+                            <PrintableField label="First Name (Vorname)" value={formData.sepaFirstName} />
+                            <PrintableField label="Last Name (Nachname)" value={formData.sepaLastName} />
+                            <PrintableField label="Address (Adresse)" value={formData.sepaAddress} />
+                            <div className="grid grid-cols-2 gap-x-2">
+                                <PrintableField label="Postal Code" value={formData.sepaPostalCode} />
+                                <PrintableField label="City (Ort)" value={formData.sepaCity} />
+                            </div>
+                            <PrintableField label="IBAN" value={formData.iban} />
+                        </div>
+                    </section>
+                    
+                    <section className="space-y-1 p-3 border border-gray-200 rounded-lg">
+                        <h3 className="text-lg font-bold text-gray-700 border-b pb-1 mb-1.5">Signature (Unterschrift)</h3>
+                        <div className="flex flex-row items-start gap-1">
+                            <div className="w-full sm:w-1/2 flex-1 flex flex-col">
+                            <label className="font-semibold text-gray-700 mb-2">Entry Date (Eintrittsdatum):</label>
+                            <div className="p-2 text-sm border border-gray-300 rounded-md bg-gray-50 text-gray-800 w-1/2">
+                                {formData.entryDate}
+                            </div>
+                        </div>
+                            <div className="flex-1">
+                                {signatureDataUrl ? 
+                                    <img src={signatureDataUrl} alt="Signature" style={{width: '400px', height: '80px', border: '1px solid #d1d5db', borderRadius: '0.375rem', objectFit: 'contain'}}/> 
+                                    : <div style={{width: '400px', height: '80px', border: '1px solid #d1d5db', borderRadius: '0.375rem'}}></div>}
+                            </div>
+                        </div>
+                        <p className="text-xs text-gray-500 mt-1">Signature should be from the SEPA mandate owner.</p>
+                    </section>
+                </main>
+            </div>
+            <div id="printable-terms-container">
+                <TermsAndConditions />
+            </div>
+        </div>
+    );
+};
+
+
+const FormField: React.FC<{ 
+    label: string; 
+    name: string; 
+    value: string; 
+    onChange: (e: React.ChangeEvent<HTMLInputElement>) => void; 
+    onBlur?: (e: React.FocusEvent<HTMLInputElement>) => void;
+    placeholder?: string; 
+    type?: string; 
+    error?: string; 
+    required?: boolean; 
+}> = ({ label, name, value, onChange, onBlur, placeholder, type = 'text', error, required }) => {
     const inputRef = useRef<HTMLInputElement>(null);
+    const [touched, setTouched] = useState(false);
 
     const handleIconClick = () => {
         if (inputRef.current?.showPicker) {
             inputRef.current.showPicker();
         }
     };
+    
+    const handleBlur = (e: React.FocusEvent<HTMLInputElement>) => {
+        setTouched(true);
+        if (onBlur) onBlur(e);
+    };
+
+    const isSuccess = touched && value && !error;
+    const isError = !!error;
+
+    // Determine border color: Red if error, Green if touched and valid (and has value), Gray otherwise
+    const borderColor = isError 
+        ? 'border-red-500 focus:border-red-500 focus:ring-red-200' 
+        : isSuccess
+            ? 'border-green-500 focus:border-green-500 focus:ring-green-200' 
+            : 'border-gray-300 focus:border-blue-500 focus:ring-blue-200';
 
     return (
         <div className="flex flex-col">
@@ -50,16 +165,33 @@ const FormField: React.FC<{ label: string; name: string; value: string; onChange
                         type={type}
                         value={value}
                         onChange={onChange}
+                        onBlur={handleBlur}
                         placeholder={placeholder || label}
-                        className={`w-full p-1.5 text-sm border rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition bg-white text-black ${error ? 'border-red-500' : 'border-gray-300'} ${type === 'date' ? 'pr-2' : ''}`}
+                        className={`w-full p-1.5 text-sm border rounded-md focus:ring-2 transition bg-white text-black ${borderColor} ${type === 'date' || isSuccess || isError ? 'pr-8' : ''}`}
                     />
-                    {type === 'date' && (
+                    
+                    {/* Date Picker Icon */}
+                    {type === 'date' && !isError && !isSuccess && (
                         <div onClick={handleIconClick} className="absolute inset-y-0 right-0 flex items-center pr-2 cursor-pointer">
                              <svg className="h-5 w-5 text-gray-500" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
                                <path fillRule="evenodd" d="M5.75 2a.75.75 0 01.75.75V4h7V2.75a.75.75 0 011.5 0V4h.25A2.75 2.75 0 0118 6.75v8.5A2.75 2.75 0 0115.25 18H4.75A2.75 2.75 0 012 15.25v-8.5A2.75 2.75 0 014.75 4H5V2.75A.75.75 0 015.75 2zM4.5 8.5a.5.5 0 000 1h11a.5.5 0 000-1h-11z" clipRule="evenodd" />
                              </svg>
                         </div>
                     )}
+                    
+                    {/* Validation Icons */}
+                     <div className="absolute inset-y-0 right-0 flex items-center pr-2 pointer-events-none">
+                        {isError && (
+                             <svg className="h-5 w-5 text-red-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                            </svg>
+                        )}
+                        {isSuccess && (
+                            <svg className="h-5 w-5 text-green-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                            </svg>
+                        )}
+                    </div>
                 </div>
             </div>
             {error && <p className="text-red-500 text-xs mt-1 ml-36 pl-2">{error}</p>}
@@ -101,10 +233,10 @@ const App: React.FC = () => {
   const [isSigned, setIsSigned] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
   const [statusMessage, setStatusMessage] = useState('');
-  const [submissionSuccess, setSubmissionSuccess] = useState(false);
   const [isFormCompleteAndValid, setIsFormCompleteAndValid] = useState(false);
   const [signatureMode, setSignatureMode] = useState<'draw' | 'upload'>('draw');
   const [uploadedSignature, setUploadedSignature] = useState<string | null>(null);
+  const [printableSignature, setPrintableSignature] = useState<string | null>(null);
 
   const signatureCanvasRef = useRef<HTMLCanvasElement>(null);
   const isDrawing = useRef(false);
@@ -153,10 +285,18 @@ const App: React.FC = () => {
     
     setFormData(prev => ({ ...prev, [name]: formattedValue }));
 
+    // Validate on change to clear errors if they exist
     if (errors[name]) {
         const error = validateField(name, formattedValue);
         setErrors(prev => ({ ...prev, [name]: error }));
     }
+  };
+
+  // New function to handle blur events for validation
+  const handleBlur = (e: React.FocusEvent<HTMLInputElement>) => {
+    const { name, value } = e.target as { name: keyof IFormData; value: string };
+    const error = validateField(name, value);
+    setErrors(prev => ({ ...prev, [name]: error }));
   };
 
   const isCanvasBlank = useCallback((): boolean => {
@@ -280,25 +420,21 @@ const App: React.FC = () => {
     }
     
     setErrors(newErrors);
-    if (Object.keys(newErrors).length > 0) {
-        setTimeout(() => {
-            const firstErrorField = document.querySelector('.border-red-500, .outline-red-500');
-            firstErrorField?.scrollIntoView({ behavior: 'smooth', block: 'center' });
-        }, 100);
-        return false;
-    }
-    return true;
+    return Object.keys(newErrors).length === 0;
   }, [formData, validateField]);
 
+  // Real-time check for button state without setting errors for the user
   const checkFormValidity = useCallback(() => {
     const fieldsToValidate: Array<keyof IFormData> = [
         'firstName', 'lastName', 'dob', 'gender', 'address', 'postalCode', 'city', 'phone', 'email',
         'sepaGender', 'sepaFirstName', 'sepaLastName', 'sepaAddress', 'sepaPostalCode', 'sepaCity', 'iban'
     ];
     for (const key of fieldsToValidate) {
-        if (validateField(key, formData[key])) return false;
+        if (validateField(key, formData[key])) {
+            return false; // Found an error, form is not valid
+        }
     }
-    return true;
+    return true; // No errors found
   }, [formData, validateField]);
 
   useEffect(() => {
@@ -306,8 +442,25 @@ const App: React.FC = () => {
   }, [formData, checkFormValidity]);
 
 
-  const handleSubmitApplication = async () => {
-    if (!validateForm()) return;
+  const handleDownloadPdf = async () => {
+    if (typeof jspdf === 'undefined' || typeof html2canvas === 'undefined') {
+      console.error("PDF generation libraries not loaded.");
+      alert("Error: PDF libraries could not be loaded. Please check your internet connection and try again.");
+      return;
+    }
+      
+    // 1. Run full validation to display all errors to the user.
+    if (!validateForm()) {
+        setStatusMessage("Please correct the errors highlighted.");
+        setTimeout(() => {
+            const firstErrorField = document.querySelector('.border-red-500, .outline-red-500');
+            if (firstErrorField) {
+                firstErrorField.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            }
+        }, 100);
+        setTimeout(() => setStatusMessage(''), 3000);
+        return;
+    }
     
     let signatureDataUrl: string | null = null;
     if (signatureMode === 'draw' && !isCanvasBlank()) {
@@ -317,71 +470,155 @@ const App: React.FC = () => {
     }
 
     if (!signatureDataUrl) {
-      alert("Please provide a signature before submitting.");
+      alert("Please provide a signature before generating the PDF.");
       return;
     }
 
     setIsProcessing(true);
-    setStatusMessage('Submitting application... This may take a moment.');
     
+    // Prepare data for submission (sanitize IBAN)
+    const submissionData = {
+        ...formData,
+        iban: formData.iban ? formData.iban.replace(/\s+/g, '') : '',
+        signatureDataUrl
+    };
+
+    const apiUrl = 'https://hamburgkannadamitraru.com/api/submit-form.php';
+
+    // 2. Save data to the backend
     try {
-        const response = await fetch('/api/submit-form', {
+        setStatusMessage('Saving application to database...');
+        console.log('Sending data to:', apiUrl);
+        
+        const response = await fetch(apiUrl, {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ ...formData, signatureDataUrl }),
+            mode: 'cors', // Explicitly request CORS
+            headers: {
+                'Content-Type': 'application/json',
+                'Accept': 'application/json'
+            },
+            body: JSON.stringify(submissionData),
         });
 
-        const responseData = await response.json();
+        // 3. Robust Response Handling
+        let responseText = await response.text();
+        responseText = responseText.trim(); // Remove whitespace/BOM
+        console.log('Raw Server Response:', responseText);
 
-        if (!response.ok || !responseData.success) {
-            throw new Error(responseData.message || 'Failed to save form data.');
+        try {
+            // Try to parse JSON response
+            const jsonResponse = JSON.parse(responseText);
+            if (!response.ok || (jsonResponse.status && jsonResponse.status !== 'success')) {
+                throw new Error(jsonResponse.message || 'Failed to save form data.');
+            }
+        } catch (e) {
+            // If parsing fails or response is not OK
+            if (e instanceof SyntaxError) {
+                // Strip HTML tags to show a readable error message
+                const cleanText = responseText.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim();
+                const shortText = cleanText.substring(0, 300);
+                
+                // Check if it looks like an HTML page
+                if (responseText.toLowerCase().startsWith('<!doctype html') || responseText.toLowerCase().includes('<html')) {
+                    throw new Error(`Server returned a webpage instead of a JSON response. The API URL might be wrong or the server is showing an error page.\n\nServer Message: "${shortText}..."`);
+                }
+                
+                throw new Error(`Server returned an invalid response (not JSON). Please check the server logs.\n\nResponse snippet: "${shortText}"`);
+            }
+            throw e; 
         }
 
-        setSubmissionSuccess(true);
-        setStatusMessage(responseData.message);
+        // Data saved successfully, now generate PDF
+        setStatusMessage('Data saved successfully! Generating PDF...');
 
     } catch (error) {
         console.error("Submission Error:", error);
-        let errorMessage = 'An unknown error occurred. Please try again.';
-        if (error instanceof Error) {
+        let errorMessage = 'An unknown error occurred while saving the application.';
+        
+        if (error instanceof TypeError && error.message.includes('Failed to fetch')) {
+            errorMessage = 'Connection failed. This is likely a CORS issue (your PHP backend is blocking the connection from Vercel) or the API URL is incorrect. Please check your server headers.';
+        } else if (error instanceof Error) {
             errorMessage = error.message;
         }
-        alert(`Could not submit your application.\n\nError: ${errorMessage}`);
-        setStatusMessage('');
-    } finally {
+        
+        alert(`Could not save your application.\n\n${errorMessage}`);
         setIsProcessing(false);
+        setStatusMessage('');
+        return; // Stop the process if saving fails
     }
-  };
-  
-  const resetForm = () => {
-      setFormData(initialFormData);
-      setErrors({});
-      clearSignature();
-      setSubmissionSuccess(false);
-      setStatusMessage('');
-  };
+    
+    // 4. Generate PDF
+    setPrintableSignature(signatureDataUrl);
+    
+    // Allow React to render the printable view before capturing
+    setTimeout(async () => {
+        const formContent = document.getElementById('printable-form-content');
+        const termsContent = document.getElementById('printable-terms-container');
 
-  if (submissionSuccess) {
-    return (
-        <div className="min-h-screen bg-gray-100 flex items-center justify-center p-4">
-            <div className="max-w-xl mx-auto bg-white p-8 rounded-lg shadow-md text-center">
-                 <svg className="w-16 h-16 mx-auto text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
-                <h2 className="text-2xl font-bold text-gray-800 mt-4">Thank You!</h2>
-                <p className="text-gray-600 mt-2">{statusMessage}</p>
-                <p className="text-gray-600 mt-1">A completed copy of your application has been sent to your email address for your records.</p>
-                <button
-                    onClick={resetForm}
-                    className="mt-6 px-6 py-2 bg-blue-600 text-white font-bold rounded-lg shadow-md hover:bg-blue-700"
-                >
-                    Submit Another Application
-                </button>
-            </div>
-        </div>
-    );
-  }
+        if (!formContent || !termsContent) {
+            console.error("Printable content not found.");
+            setIsProcessing(false);
+            setPrintableSignature(null);
+            return;
+        }
+        
+        try {
+            const { jsPDF } = jspdf;
+            const pdf = new jsPDF({ orientation: 'p', unit: 'mm', format: 'a4' });
+            const pdfWidth = pdf.internal.pageSize.getWidth();
+            const pageHeight = pdf.internal.pageSize.getHeight();
+
+            // --- Process Form Content ---
+            const formCanvas = await html2canvas(formContent, { scale: 2, useCORS: true });
+            const formImgData = formCanvas.toDataURL('image/png');
+            const formImgHeight = (formCanvas.height * pdfWidth) / formCanvas.width;
+            
+            let formHeightLeft = formImgHeight;
+            let position = 0;
+            pdf.addImage(formImgData, 'PNG', 0, position, pdfWidth, formImgHeight);
+            formHeightLeft -= pageHeight;
+            
+            while (formHeightLeft > 0) {
+                position -= pageHeight;
+                pdf.addPage();
+                pdf.addImage(formImgData, 'PNG', 0, position, pdfWidth, formImgHeight);
+                formHeightLeft -= pageHeight;
+            }
+
+            // --- Process Terms Content ---
+            pdf.addPage();
+            const termsCanvas = await html2canvas(termsContent, { scale: 2, useCORS: true });
+            const termsImgData = termsCanvas.toDataURL('image/png');
+            const termsImgHeight = (termsCanvas.height * pdfWidth) / termsCanvas.width;
+
+            let termsHeightLeft = termsImgHeight;
+            position = 0; // Reset position for the new page
+            pdf.addImage(termsImgData, 'PNG', 0, position, pdfWidth, termsImgHeight);
+            termsHeightLeft -= pageHeight;
+
+            while (termsHeightLeft > 0) {
+                position -= pageHeight;
+                pdf.addPage();
+                pdf.addImage(termsImgData, 'PNG', 0, position, pdfWidth, termsImgHeight);
+                termsHeightLeft -= pageHeight;
+            }
+    
+            pdf.save('HKF_Membership_Application.pdf');
+    
+        } catch (error) {
+          console.error("Error generating PDF:", error);
+          alert("Failed to generate PDF. Please try again.");
+        } finally {
+          setIsProcessing(false);
+          setStatusMessage('');
+          setPrintableSignature(null);
+        }
+    }, 100);
+  };
 
   return (
     <>
+      {isProcessing && <PrintableView formData={formData} signatureDataUrl={printableSignature} />}
       <div className="min-h-screen bg-gray-100 p-4">
         <div className="max-w-4xl mx-auto text-sm">
           <div id="pdf-content-area">
@@ -391,6 +628,7 @@ const App: React.FC = () => {
                   <h1 className="text-xl sm:text-2xl font-bold text-gray-800">Hamburg Kannada Freunde e.V</h1>
                   <p className="text-md text-blue-600 font-semibold">EINTRITTSFORMULAR / Membership Form</p>
                 </div>
+                {/* <img src="https://picsum.photos/id/111/80/80" alt="Logo" className="w-20 h-20 rounded-full object-cover mt-4 sm:mt-0" /> */}
                 <img src={logoHKF} alt="Logo" className="w-20 h-20 rounded-full object-cover mt-4 sm:mt-0" />
               </header>
 
@@ -398,17 +636,17 @@ const App: React.FC = () => {
                 {/* Personal Details Section */}
                 <section className="space-y-1.5 p-3 border border-gray-200 rounded-lg">
                     <h3 className="text-lg font-bold text-gray-700 border-b pb-1 mb-1.5">Personal Details (Bitte in Druckbuchstaben ausfüllen)</h3>
-                    <FormField label="First Name (Vorname)" name="firstName" value={formData.firstName} onChange={handleInputChange} error={errors.firstName} required />
-                    <FormField label="Last Name (Nachname)" name="lastName" value={formData.lastName} onChange={handleInputChange} error={errors.lastName} required />
-                    <FormField label="Date of Birth (Geburtsdatum)" name="dob" type="date" value={formData.dob} onChange={handleInputChange} error={errors.dob} required />
+                    <FormField label="First Name (Vorname)" name="firstName" value={formData.firstName} onChange={handleInputChange} onBlur={handleBlur} error={errors.firstName} required />
+                    <FormField label="Last Name (Nachname)" name="lastName" value={formData.lastName} onChange={handleInputChange} onBlur={handleBlur} error={errors.lastName} required />
+                    <FormField label="Date of Birth (Geburtsdatum)" name="dob" type="date" value={formData.dob} onChange={handleInputChange} onBlur={handleBlur} error={errors.dob} required />
                     <RadioGroup label="Gender (Geschlecht)" name="gender" selectedValue={formData.gender} onChange={handleInputChange} options={[{value: 'male', label: 'Männlich (Male)'}, {value: 'female', label: 'Weiblich (Female)'}]} error={errors.gender} required />
-                    <FormField label="Address (Adresse)" name="address" value={formData.address} onChange={handleInputChange} error={errors.address} required />
+                    <FormField label="Address (Adresse)" name="address" value={formData.address} onChange={handleInputChange} onBlur={handleBlur} error={errors.address} required />
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-x-2 gap-y-1.5">
-                      <FormField label="Postal Code" name="postalCode" value={formData.postalCode} onChange={handleInputChange} error={errors.postalCode} required />
-                      <FormField label="City (Ort)" name="city" value={formData.city} onChange={handleInputChange} error={errors.city} required />
+                      <FormField label="Postal Code" name="postalCode" value={formData.postalCode} onChange={handleInputChange} onBlur={handleBlur} error={errors.postalCode} required />
+                      <FormField label="City (Ort)" name="city" value={formData.city} onChange={handleInputChange} onBlur={handleBlur} error={errors.city} required />
                     </div>
-                    <FormField label="Phone (Tel./Handy)" name="phone" value={formData.phone} onChange={handleInputChange} type="tel" error={errors.phone} required />
-                    <FormField label="E-Mail" name="email" value={formData.email} onChange={handleInputChange} type="email" error={errors.email} required />
+                    <FormField label="Phone (Tel./Handy)" name="phone" value={formData.phone} onChange={handleInputChange} onBlur={handleBlur} type="tel" error={errors.phone} required />
+                    <FormField label="E-Mail" name="email" value={formData.email} onChange={handleInputChange} onBlur={handleBlur} type="email" error={errors.email} required />
                 </section>
 
                  {/* SEPA Mandate Section */}
@@ -417,14 +655,14 @@ const App: React.FC = () => {
                     <p className="text-xs text-gray-600">Hiermit ermächtige ich den Hamburg Kannada Freunde e.V., den Mitgliedsbeitrag von meinem unten angegebenen Konto per Lastschrift einzuziehen. / I hereby authorize Hamburg Kannada Freunde e.V. to collect the membership fee from my account specified below via direct debit.</p>
                     <div className="space-y-1.5">
                         <RadioGroup label="Gender" name="sepaGender" selectedValue={formData.sepaGender} onChange={handleInputChange} options={[{value: 'male', label: 'Male'}, {value: 'female', 'label': 'Female'}, {value: 'diverse', label: 'Diverse'}, {value: 'none', label: 'No Answer'}, {value: 'institution', label: 'Institution'}]} error={errors.sepaGender} required />
-                        <FormField label="First Name (Vorname)" name="sepaFirstName" value={formData.sepaFirstName} onChange={handleInputChange} error={errors.sepaFirstName} required />
-                        <FormField label="Last Name (Nachname)" name="sepaLastName" value={formData.sepaLastName} onChange={handleInputChange} error={errors.sepaLastName} required />
-                        <FormField label="Address (Adresse)" name="sepaAddress" value={formData.sepaAddress} onChange={handleInputChange} error={errors.sepaAddress} required />
+                        <FormField label="First Name (Vorname)" name="sepaFirstName" value={formData.sepaFirstName} onChange={handleInputChange} onBlur={handleBlur} error={errors.sepaFirstName} required />
+                        <FormField label="Last Name (Nachname)" name="sepaLastName" value={formData.sepaLastName} onChange={handleInputChange} onBlur={handleBlur} error={errors.sepaLastName} required />
+                        <FormField label="Address (Adresse)" name="sepaAddress" value={formData.sepaAddress} onChange={handleInputChange} onBlur={handleBlur} error={errors.sepaAddress} required />
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-x-2 gap-y-1.5">
-                            <FormField label="Postal Code" name="sepaPostalCode" value={formData.sepaPostalCode} onChange={handleInputChange} error={errors.sepaPostalCode} required />
-                            <FormField label="City (Ort)" name="sepaCity" value={formData.sepaCity} onChange={handleInputChange} error={errors.sepaCity} required />
+                            <FormField label="Postal Code" name="sepaPostalCode" value={formData.sepaPostalCode} onChange={handleInputChange} onBlur={handleBlur} error={errors.sepaPostalCode} required />
+                            <FormField label="City (Ort)" name="sepaCity" value={formData.sepaCity} onChange={handleInputChange} onBlur={handleBlur} error={errors.sepaCity} required />
                         </div>
-                        <FormField label="IBAN" name="iban" value={formData.iban} onChange={handleInputChange} placeholder="DE00 0000 0000 0000 0000 00" error={errors.iban} required />
+                        <FormField label="IBAN" name="iban" value={formData.iban} onChange={handleInputChange} onBlur={handleBlur} placeholder="DE00 0000 0000 0000 0000 00" error={errors.iban} required />
                     </div>
                 </section>
                 
@@ -472,7 +710,7 @@ const App: React.FC = () => {
           
           <div className="mt-4 flex flex-col sm:flex-row justify-center items-center gap-4">
               <button
-                  onClick={handleSubmitApplication}
+                  onClick={handleDownloadPdf}
                   disabled={isProcessing || !isSigned || !isFormCompleteAndValid}
                   className="w-full sm:w-auto px-6 py-2 bg-blue-600 text-white font-bold rounded-lg shadow-md hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-all duration-300 transform hover:scale-105 flex items-center justify-center gap-2"
               >
@@ -485,7 +723,7 @@ const App: React.FC = () => {
                           {statusMessage || 'Processing...'}
                       </>
                   ) : (
-                      'Submit Application'
+                      'Save Application & Download PDF'
                   )}
               </button>
               {!isProcessing && (!isFormCompleteAndValid || !isSigned) && (
@@ -546,6 +784,11 @@ const App: React.FC = () => {
                 © {new Date().getFullYear()} Hamburg Kannada Freunde e.V.
             </div>
         </footer>
+
+ {/* <footer className="text-center text-xs text-gray-500 mt-6 pb-4">
+              <p>Hamburg Kannada Freunde e.V. | Emmi-Ruben-Weg 17B, 21147 Hamburg</p>
+              <p>contact@hamburgkannadamitraru.com | www.hamburgkannadamitraru.com</p>
+          </footer> */}
 
         </div>
       </div>
