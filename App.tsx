@@ -237,6 +237,7 @@ const App: React.FC = () => {
   const [signatureMode, setSignatureMode] = useState<'draw' | 'upload'>('draw');
   const [uploadedSignature, setUploadedSignature] = useState<string | null>(null);
   const [printableSignature, setPrintableSignature] = useState<string | null>(null);
+  const [showSuccessPopup, setShowSuccessPopup] = useState(false);
 
   const signatureCanvasRef = useRef<HTMLCanvasElement>(null);
   const isDrawing = useRef(false);
@@ -604,6 +605,7 @@ const App: React.FC = () => {
             }
     
             pdf.save('HKF_Membership_Application.pdf');
+            setShowSuccessPopup(true);
     
         } catch (error) {
           console.error("Error generating PDF:", error);
@@ -785,10 +787,48 @@ const App: React.FC = () => {
             </div>
         </footer>
 
- {/* <footer className="text-center text-xs text-gray-500 mt-6 pb-4">
-              <p>Hamburg Kannada Freunde e.V. | Emmi-Ruben-Weg 17B, 21147 Hamburg</p>
-              <p>contact@hamburgkannadamitraru.com | www.hamburgkannadamitraru.com</p>
-          </footer> */}
+        {/* Success Popup Modal */}
+        {showSuccessPopup && (
+            <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black bg-opacity-60 backdrop-blur-sm">
+                <div className="bg-white rounded-lg shadow-2xl max-w-lg w-full p-6 text-center transform transition-all scale-100 border border-gray-200">
+                    <div className="mx-auto flex items-center justify-center h-14 w-14 rounded-full bg-green-100 mb-5">
+                        <svg className="h-8 w-8 text-green-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7" />
+                        </svg>
+                    </div>
+                    <h3 className="text-xl font-bold text-gray-900 mb-2">Application Successfully Generated</h3>
+                    <p className="text-gray-600 mb-6 px-2">
+                        Your data has been saved and the PDF application form has been downloaded to your device.
+                    </p>
+                    
+                    <div className="text-left bg-blue-50 p-4 rounded-md border border-blue-100 mb-6">
+                        <p className="font-bold text-blue-800 mb-1 text-sm uppercase tracking-wide">Final Step Required:</p>
+                        <p className="text-sm text-blue-800">
+                            To complete your registration, please email the <b>downloaded PDF</b> to our administration team at <span className="font-bold underline">contact@hamburgkannadamitraru.com</span>.
+                        </p>
+                    </div>
+
+                    <div className="flex flex-col gap-3">
+                         <a 
+                            href={`mailto:contact@hamburgkannadamitraru.com?subject=${encodeURIComponent(`Membership Application - ${formData.firstName} ${formData.lastName}`)}&body=${encodeURIComponent(`Dear HKF Team,\n\nPlease find attached my signed membership application form.\n\nRegards,\n${formData.firstName} ${formData.lastName}`)}`}
+                            className="w-full inline-flex justify-center items-center gap-2 rounded-md border border-transparent shadow-md px-4 py-3 bg-blue-600 text-base font-medium text-white hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 sm:text-sm"
+                        >
+                            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"></path></svg>
+                            Open Email Client
+                        </a>
+                        <p className="text-xs text-gray-500 italic">
+                            * Note: You must manually attach the downloaded PDF file to the email.
+                        </p>
+                        <button
+                            onClick={() => setShowSuccessPopup(false)}
+                            className="mt-2 w-full inline-flex justify-center rounded-md border border-gray-300 shadow-sm px-4 py-2 bg-white text-base font-medium text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 sm:text-sm"
+                        >
+                            Close
+                        </button>
+                    </div>
+                </div>
+            </div>
+        )}
 
         </div>
       </div>
