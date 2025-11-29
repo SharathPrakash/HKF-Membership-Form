@@ -238,6 +238,12 @@ const App: React.FC = () => {
   const [uploadedSignature, setUploadedSignature] = useState<string | null>(null);
   const [printableSignature, setPrintableSignature] = useState<string | null>(null);
   const [showSuccessPopup, setShowSuccessPopup] = useState(false);
+  const [pdfDownloadUrl, setPdfDownloadUrl] = useState<string | null>(null);
+  
+  // New State for Async Submission Logic
+  const [isSaved, setIsSaved] = useState(false);
+  const [isSavingBackend, setIsSavingBackend] = useState(false);
+  const [finalSignatureUrl, setFinalSignatureUrl] = useState<string | null>(null);
 
   const signatureCanvasRef = useRef<HTMLCanvasElement>(null);
   const isDrawing = useRef(false);
@@ -285,6 +291,11 @@ const App: React.FC = () => {
     }
     
     setFormData(prev => ({ ...prev, [name]: formattedValue }));
+    
+    // Reset saved state if user changes data, forcing a new save on interaction
+    setIsSaved(false);
+    setPdfDownloadUrl(null); 
+    setShowSuccessPopup(false);
 
     // Validate on change to clear errors if they exist
     if (errors[name]) {
@@ -346,6 +357,8 @@ const App: React.FC = () => {
         isDrawing.current = false;
         ctx.closePath();
         setIsSigned(!isCanvasBlank());
+        // Reset saved state if signature changes
+        setIsSaved(false);
     };
     
     ctx.lineWidth = 2;
@@ -391,6 +404,7 @@ const App: React.FC = () => {
         setUploadedSignature(null);
     }
     setIsSigned(false);
+    setIsSaved(false);
   };
 
   const handleSignatureUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -399,6 +413,7 @@ const App: React.FC = () => {
         const reader = new FileReader();
         reader.onload = (event) => {
             setUploadedSignature(event.target?.result as string);
+            setIsSaved(false);
         };
         reader.readAsDataURL(file);
     } else {
@@ -443,7 +458,7 @@ const App: React.FC = () => {
   }, [formData, checkFormValidity]);
 
 
-  const handleDownloadPdf = async () => {
+  const handleGeneratePdf = async () => {
     if (typeof jspdf === 'undefined' || typeof html2canvas === 'undefined') {
       console.error("PDF generation libraries not loaded.");
       alert("Error: PDF libraries could not be loaded. Please check your internet connection and try again.");
@@ -463,6 +478,7 @@ const App: React.FC = () => {
         return;
     }
     
+    // Capture signature for both PDF and submission
     let signatureDataUrl: string | null = null;
     if (signatureMode === 'draw' && !isCanvasBlank()) {
       signatureDataUrl = signatureCanvasRef.current?.toDataURL('image/png') || null;
@@ -475,80 +491,13 @@ const App: React.FC = () => {
       return;
     }
 
+    setFinalSignatureUrl(signatureDataUrl); // Store for backend submission later
     setIsProcessing(true);
+    setPdfDownloadUrl(null); 
     
-    // Prepare data for submission (sanitize IBAN)
-    const submissionData = {
-        ...formData,
-        iban: formData.iban ? formData.iban.replace(/\s+/g, '') : '',
-        signatureDataUrl
-    };
-
-    const apiUrl = 'https://hamburgkannadamitraru.com/api/submit-form.php';
-
-    // 2. Save data to the backend
-    try {
-        setStatusMessage('Saving application to database...');
-        console.log('Sending data to:', apiUrl);
-        
-        const response = await fetch(apiUrl, {
-            method: 'POST',
-            mode: 'cors', // Explicitly request CORS
-            headers: {
-                'Content-Type': 'application/json',
-                'Accept': 'application/json'
-            },
-            body: JSON.stringify(submissionData),
-        });
-
-        // 3. Robust Response Handling
-        let responseText = await response.text();
-        responseText = responseText.trim(); // Remove whitespace/BOM
-        console.log('Raw Server Response:', responseText);
-
-        try {
-            // Try to parse JSON response
-            const jsonResponse = JSON.parse(responseText);
-            if (!response.ok || (jsonResponse.status && jsonResponse.status !== 'success')) {
-                throw new Error(jsonResponse.message || 'Failed to save form data.');
-            }
-        } catch (e) {
-            // If parsing fails or response is not OK
-            if (e instanceof SyntaxError) {
-                // Strip HTML tags to show a readable error message
-                const cleanText = responseText.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim();
-                const shortText = cleanText.substring(0, 300);
-                
-                // Check if it looks like an HTML page
-                if (responseText.toLowerCase().startsWith('<!doctype html') || responseText.toLowerCase().includes('<html')) {
-                    throw new Error(`Server returned a webpage instead of a JSON response. The API URL might be wrong or the server is showing an error page.\n\nServer Message: "${shortText}..."`);
-                }
-                
-                throw new Error(`Server returned an invalid response (not JSON). Please check the server logs.\n\nResponse snippet: "${shortText}"`);
-            }
-            throw e; 
-        }
-
-        // Data saved successfully, now generate PDF
-        setStatusMessage('Data saved successfully! Generating PDF...');
-
-    } catch (error) {
-        console.error("Submission Error:", error);
-        let errorMessage = 'An unknown error occurred while saving the application.';
-        
-        if (error instanceof TypeError && error.message.includes('Failed to fetch')) {
-            errorMessage = 'Connection failed. This is likely a CORS issue (your PHP backend is blocking the connection from Vercel) or the API URL is incorrect. Please check your server headers.';
-        } else if (error instanceof Error) {
-            errorMessage = error.message;
-        }
-        
-        alert(`Could not save your application.\n\n${errorMessage}`);
-        setIsProcessing(false);
-        setStatusMessage('');
-        return; // Stop the process if saving fails
-    }
+    setStatusMessage('Generating PDF...');
     
-    // 4. Generate PDF
+    // 2. Generate PDF
     setPrintableSignature(signatureDataUrl);
     
     // Allow React to render the printable view before capturing
@@ -604,7 +553,10 @@ const App: React.FC = () => {
                 termsHeightLeft -= pageHeight;
             }
     
-            pdf.save('HKF_Membership_Application.pdf');
+            // Generate Blob URL instead of saving immediately
+            const blob = pdf.output('blob');
+            const blobUrl = URL.createObjectURL(blob);
+            setPdfDownloadUrl(blobUrl);
             setShowSuccessPopup(true);
     
         } catch (error) {
@@ -613,9 +565,99 @@ const App: React.FC = () => {
         } finally {
           setIsProcessing(false);
           setStatusMessage('');
-          setPrintableSignature(null);
+          // Do not clear printableSignature here, might be needed if they regenerate? 
+          // Actually, we can clear it, as we stored it in finalSignatureUrl
+          setPrintableSignature(null); 
         }
     }, 100);
+  };
+  
+  const saveDataToBackend = async (): Promise<boolean> => {
+      setIsSavingBackend(true);
+      
+      const submissionData = {
+        ...formData,
+        iban: formData.iban ? formData.iban.replace(/\s+/g, '') : '',
+        signatureDataUrl: finalSignatureUrl
+      };
+
+      const apiUrl = 'https://hamburgkannadamitraru.com/api/submit-form.php';
+
+      try {
+        console.log('Sending data to:', apiUrl);
+        const response = await fetch(apiUrl, {
+            method: 'POST',
+            mode: 'cors',
+            headers: {
+                'Content-Type': 'application/json',
+                'Accept': 'application/json'
+            },
+            body: JSON.stringify(submissionData),
+        });
+
+        let responseText = await response.text();
+        responseText = responseText.trim();
+        console.log('Raw Server Response:', responseText);
+
+        try {
+            const jsonResponse = JSON.parse(responseText);
+            if (!response.ok || (jsonResponse.status && jsonResponse.status !== 'success')) {
+                throw new Error(jsonResponse.message || 'Failed to save form data.');
+            }
+        } catch (e) {
+            if (e instanceof SyntaxError) {
+                const cleanText = responseText.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim();
+                const shortText = cleanText.substring(0, 300);
+                if (responseText.toLowerCase().startsWith('<!doctype html') || responseText.toLowerCase().includes('<html')) {
+                    throw new Error(`Server returned a webpage instead of a JSON response. The API URL might be wrong.\n\nServer Message: "${shortText}..."`);
+                }
+                throw new Error(`Server returned an invalid response (not JSON).\n\nResponse snippet: "${shortText}"`);
+            }
+            throw e; 
+        }
+
+        setIsSaved(true);
+        return true;
+
+    } catch (error) {
+        console.error("Submission Error:", error);
+        let errorMessage = 'An unknown error occurred while saving the application.';
+        if (error instanceof TypeError && error.message.includes('Failed to fetch')) {
+            errorMessage = 'Connection failed. Likely a CORS issue or incorrect API URL.';
+        } else if (error instanceof Error) {
+            errorMessage = error.message;
+        }
+        alert(`Could not save your application to the database.\n\n${errorMessage}\n\nPlease check your internet connection and try again.`);
+        return false;
+    } finally {
+        setIsSavingBackend(false);
+    }
+  };
+
+  const handlePopupAction = async (action: 'download' | 'email') => {
+      // 1. If not saved yet, try to save first
+      if (!isSaved) {
+          const success = await saveDataToBackend();
+          if (!success) {
+              // If save failed, we alert the user (in saveDataToBackend) and stop.
+              // They can try clicking again.
+              return; 
+          }
+      }
+
+      // 2. Perform the action
+      if (action === 'download' && pdfDownloadUrl) {
+          const link = document.createElement('a');
+          link.href = pdfDownloadUrl;
+          link.download = 'HKF_Membership_Application.pdf';
+          document.body.appendChild(link);
+          link.click();
+          document.body.removeChild(link);
+      } else if (action === 'email') {
+          const subject = `Membership Application - ${formData.firstName} ${formData.lastName}`;
+          const body = `Dear HKF Team,\n\nPlease find attached my signed membership application form.\n\nRegards,\n${formData.firstName} ${formData.lastName}`;
+          window.location.href = `mailto:contact@hamburgkannadamitraru.com?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+      }
   };
 
   return (
@@ -712,7 +754,7 @@ const App: React.FC = () => {
           
           <div className="mt-4 flex flex-col sm:flex-row justify-center items-center gap-4">
               <button
-                  onClick={handleDownloadPdf}
+                  onClick={handleGeneratePdf}
                   disabled={isProcessing || !isSigned || !isFormCompleteAndValid}
                   className="w-full sm:w-auto px-6 py-2 bg-blue-600 text-white font-bold rounded-lg shadow-md hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-all duration-300 transform hover:scale-105 flex items-center justify-center gap-2"
               >
@@ -725,7 +767,7 @@ const App: React.FC = () => {
                           {statusMessage || 'Processing...'}
                       </>
                   ) : (
-                      'Save Application & Download PDF'
+                      'Generate Membership Application'
                   )}
               </button>
               {!isProcessing && (!isFormCompleteAndValid || !isSigned) && (
@@ -790,38 +832,73 @@ const App: React.FC = () => {
         {/* Success Popup Modal */}
         {showSuccessPopup && (
             <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black bg-opacity-60 backdrop-blur-sm">
-                <div className="bg-white rounded-lg shadow-2xl max-w-lg w-full p-6 text-center transform transition-all scale-100 border border-gray-200">
+                <div className="bg-white rounded-lg shadow-2xl max-w-lg w-full p-6 text-center transform transition-all scale-100 border border-gray-200 overflow-y-auto max-h-[90vh]">
                     <div className="mx-auto flex items-center justify-center h-14 w-14 rounded-full bg-green-100 mb-5">
                         <svg className="h-8 w-8 text-green-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7" />
                         </svg>
                     </div>
-                    <h3 className="text-xl font-bold text-gray-900 mb-2">Application Successfully Generated</h3>
+                    <h3 className="text-xl font-bold text-gray-900 mb-2">Application Generated Successfully!</h3>
                     <p className="text-gray-600 mb-6 px-2">
-                        Your data has been saved and the PDF application form has been downloaded to your device.
+                        Please follow the steps below to complete the process.
                     </p>
                     
                     <div className="text-left bg-blue-50 p-4 rounded-md border border-blue-100 mb-6">
                         <p className="font-bold text-blue-800 mb-1 text-sm uppercase tracking-wide">Final Step Required:</p>
                         <p className="text-sm text-blue-800">
-                            To complete your registration, please email the <b>downloaded PDF</b> to our administration team at <span className="font-bold underline">contact@hamburgkannadamitraru.com</span>.
+                            You must <b>download</b> the PDF and <b>email</b> it to our administration team at <span className="font-bold underline">contact@hamburgkannadamitraru.com</span>.
                         </p>
                     </div>
 
                     <div className="flex flex-col gap-3">
-                         <a 
-                            href={`mailto:contact@hamburgkannadamitraru.com?subject=${encodeURIComponent(`Membership Application - ${formData.firstName} ${formData.lastName}`)}&body=${encodeURIComponent(`Dear HKF Team,\n\nPlease find attached my signed membership application form.\n\nRegards,\n${formData.firstName} ${formData.lastName}`)}`}
-                            className="w-full inline-flex justify-center items-center gap-2 rounded-md border border-transparent shadow-md px-4 py-3 bg-blue-600 text-base font-medium text-white hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 sm:text-sm"
+                         {/* Step 1: Download Button */}
+                         {pdfDownloadUrl && (
+                            <button 
+                                onClick={() => handlePopupAction('download')}
+                                disabled={isSavingBackend}
+                                className="w-full inline-flex justify-center items-center gap-2 rounded-md border border-transparent shadow-md px-4 py-3 bg-green-600 text-base font-medium text-white hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 sm:text-sm disabled:bg-gray-400 disabled:cursor-not-allowed"
+                            >
+                                {isSavingBackend ? (
+                                    <>
+                                        <svg className="animate-spin -ml-1 mr-2 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
+                                        Saving...
+                                    </>
+                                ) : (
+                                    <>
+                                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path>
+                                        </svg>
+                                        Step 1: Save & Download PDF
+                                    </>
+                                )}
+                            </button>
+                        )}
+
+                        {/* Step 2: Email Button */}
+                         <button 
+                            onClick={() => handlePopupAction('email')}
+                            disabled={isSavingBackend}
+                            className="w-full inline-flex justify-center items-center gap-2 rounded-md border border-blue-600 shadow-sm px-4 py-3 bg-white text-base font-medium text-blue-600 hover:bg-blue-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 sm:text-sm disabled:bg-gray-100 disabled:text-gray-400 disabled:border-gray-300 disabled:cursor-not-allowed"
                         >
-                            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"></path></svg>
-                            Open Email Client
-                        </a>
+                             {isSavingBackend ? (
+                                    <>
+                                        <svg className="animate-spin -ml-1 mr-2 h-5 w-5 text-blue-600" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
+                                        Saving...
+                                    </>
+                                ) : (
+                                    <>
+                                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"></path></svg>
+                                        Step 2: Send Email to HKM Team
+                                    </>
+                                )}
+                        </button>
                         <p className="text-xs text-gray-500 italic">
                             * Note: You must manually attach the downloaded PDF file to the email.
                         </p>
+                        
                         <button
                             onClick={() => setShowSuccessPopup(false)}
-                            className="mt-2 w-full inline-flex justify-center rounded-md border border-gray-300 shadow-sm px-4 py-2 bg-white text-base font-medium text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 sm:text-sm"
+                            className="mt-2 w-full inline-flex justify-center rounded-md border border-gray-300 shadow-sm px-4 py-2 bg-gray-100 text-base font-medium text-gray-700 hover:bg-gray-200 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-500 sm:text-sm"
                         >
                             Close
                         </button>
