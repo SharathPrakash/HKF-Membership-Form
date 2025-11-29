@@ -31,7 +31,7 @@ const initialFormData: IFormData = {
 
 
 // A static component to render a filled-out version of the form for PDF generation
-const PrintableView: React.FC<{ formData: IFormData; signatureDataUrl: string | null }> = ({ formData, signatureDataUrl }) => {
+const PrintableView: React.FC<{ formData: IFormData; signatureDataUrl: string | null; hkfId: string | null }> = ({ formData, signatureDataUrl, hkfId }) => {
     
     const PrintableField: React.FC<{ label: string; value?: string | null }> = ({ label, value }) => (
         <div className="flex flex-row items-start gap-1 py-0.5">
@@ -57,6 +57,14 @@ const PrintableView: React.FC<{ formData: IFormData; signatureDataUrl: string | 
                 </header>
 
                 <main className="pt-3 space-y-3">
+                    {/* Highlighted Membership Number Box */}
+                    {hkfId && (
+                        <div className="border-2 border-red-500 bg-red-50 rounded-lg p-3 text-center mb-2 shadow-sm flex flex-col items-center justify-center">
+                            <span className="text-red-600 font-bold text-sm tracking-widest">Hamburg Kannada Freunde e.V. - Membership Number</span>
+                            <span className="text-red-800 font-extrabold text-2xl tracking-wide">{hkfId}</span>
+                        </div>
+                    )}
+
                     <section className="space-y-1.5 p-3 border border-gray-200 rounded-lg">
                         <h3 className="text-lg font-bold text-gray-700 border-b pb-1 mb-1.5">Personal Details (Bitte in Druckbuchstaben ausfüllen)</h3>
                         <PrintableField label="First Name (Vorname)" value={formData.firstName} />
@@ -88,7 +96,7 @@ const PrintableView: React.FC<{ formData: IFormData; signatureDataUrl: string | 
                         </div>
                     </section>
                     
-                    <section className="space-y-1 p-3 border border-gray-200 rounded-lg">
+                    <section className="space-y-1 p-3 border border-gray-200 rounded-lg relative">
                         <h3 className="text-lg font-bold text-gray-700 border-b pb-1 mb-1.5">Signature (Unterschrift)</h3>
                         <div className="flex flex-row items-start gap-1">
                             <div className="w-full sm:w-1/2 flex-1 flex flex-col">
@@ -104,6 +112,7 @@ const PrintableView: React.FC<{ formData: IFormData; signatureDataUrl: string | 
                             </div>
                         </div>
                         <p className="text-xs text-gray-500 mt-1">Signature should be from the SEPA mandate owner.</p>
+                        {/* hkfId removed from here */}
                     </section>
                 </main>
             </div>
@@ -242,8 +251,10 @@ const App: React.FC = () => {
   
   // New State for Async Submission Logic
   const [isSaved, setIsSaved] = useState(false);
+  const [hasDownloaded, setHasDownloaded] = useState(false);
   const [isSavingBackend, setIsSavingBackend] = useState(false);
   const [finalSignatureUrl, setFinalSignatureUrl] = useState<string | null>(null);
+  const [receivedHkfId, setReceivedHkfId] = useState<string | null>(null);
 
   const signatureCanvasRef = useRef<HTMLCanvasElement>(null);
   const isDrawing = useRef(false);
@@ -294,8 +305,10 @@ const App: React.FC = () => {
     
     // Reset saved state if user changes data, forcing a new save on interaction
     setIsSaved(false);
+    setHasDownloaded(false);
     setPdfDownloadUrl(null); 
     setShowSuccessPopup(false);
+    setReceivedHkfId(null);
 
     // Validate on change to clear errors if they exist
     if (errors[name]) {
@@ -359,6 +372,8 @@ const App: React.FC = () => {
         setIsSigned(!isCanvasBlank());
         // Reset saved state if signature changes
         setIsSaved(false);
+        setHasDownloaded(false);
+        setReceivedHkfId(null);
     };
     
     ctx.lineWidth = 2;
@@ -405,6 +420,8 @@ const App: React.FC = () => {
     }
     setIsSigned(false);
     setIsSaved(false);
+    setHasDownloaded(false);
+    setReceivedHkfId(null);
   };
 
   const handleSignatureUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -414,6 +431,8 @@ const App: React.FC = () => {
         reader.onload = (event) => {
             setUploadedSignature(event.target?.result as string);
             setIsSaved(false);
+            setHasDownloaded(false);
+            setReceivedHkfId(null);
         };
         reader.readAsDataURL(file);
     } else {
@@ -458,6 +477,74 @@ const App: React.FC = () => {
   }, [formData, checkFormValidity]);
 
 
+  const generatePdfBlob = async (): Promise<string | null> => {
+      return new Promise((resolve) => {
+          setTimeout(async () => {
+                const formContent = document.getElementById('printable-form-content');
+                const termsContent = document.getElementById('printable-terms-container');
+        
+                if (!formContent || !termsContent) {
+                    console.error("Printable content not found.");
+                    resolve(null);
+                    return;
+                }
+                
+                try {
+                    const { jsPDF } = jspdf;
+                    const pdf = new jsPDF({ orientation: 'p', unit: 'mm', format: 'a4' });
+                    const pdfWidth = pdf.internal.pageSize.getWidth();
+                    const pageHeight = pdf.internal.pageSize.getHeight();
+        
+                    // --- Process Form Content ---
+                    const formCanvas = await html2canvas(formContent, { scale: 2, useCORS: true });
+                    const formImgData = formCanvas.toDataURL('image/png');
+                    const formImgHeight = (formCanvas.height * pdfWidth) / formCanvas.width;
+                    
+                    let formHeightLeft = formImgHeight;
+                    let position = 0;
+                    pdf.addImage(formImgData, 'PNG', 0, position, pdfWidth, formImgHeight);
+                    formHeightLeft -= pageHeight;
+                    
+                    while (formHeightLeft > 0) {
+                        position -= pageHeight;
+                        pdf.addPage();
+                        pdf.addImage(formImgData, 'PNG', 0, position, pdfWidth, formImgHeight);
+                        formHeightLeft -= pageHeight;
+                    }
+        
+                    // --- Process Terms Content ---
+                    pdf.addPage();
+                    const termsCanvas = await html2canvas(termsContent, { scale: 2, useCORS: true });
+                    const termsImgData = termsCanvas.toDataURL('image/png');
+                    const termsImgHeight = (termsCanvas.height * pdfWidth) / termsCanvas.width;
+        
+                    let termsHeightLeft = termsImgHeight;
+                    position = 0; // Reset position for the new page
+                    pdf.addImage(termsImgData, 'PNG', 0, position, pdfWidth, termsImgHeight);
+                    termsHeightLeft -= pageHeight;
+        
+                    while (termsHeightLeft > 0) {
+                        position -= pageHeight;
+                        pdf.addPage();
+                        pdf.addImage(termsImgData, 'PNG', 0, position, pdfWidth, termsImgHeight);
+                        termsHeightLeft -= pageHeight;
+                    }
+            
+                    // Generate Blob URL
+                    const blob = pdf.output('blob');
+                    const blobUrl = URL.createObjectURL(blob);
+                    resolve(blobUrl);
+            
+                } catch (error) {
+                  console.error("Error generating PDF:", error);
+                  alert("Failed to generate PDF. Please try again.");
+                  resolve(null);
+                }
+          }, 100);
+      });
+  };
+
+
   const handleGeneratePdf = async () => {
     if (typeof jspdf === 'undefined' || typeof html2canvas === 'undefined') {
       console.error("PDF generation libraries not loaded.");
@@ -478,7 +565,7 @@ const App: React.FC = () => {
         return;
     }
     
-    // Capture signature for both PDF and submission
+    // Capture signature
     let signatureDataUrl: string | null = null;
     if (signatureMode === 'draw' && !isCanvasBlank()) {
       signatureDataUrl = signatureCanvasRef.current?.toDataURL('image/png') || null;
@@ -491,88 +578,28 @@ const App: React.FC = () => {
       return;
     }
 
-    setFinalSignatureUrl(signatureDataUrl); // Store for backend submission later
+    setFinalSignatureUrl(signatureDataUrl);
+    setPrintableSignature(signatureDataUrl);
+    setReceivedHkfId(null); // Ensure fresh ID on new generation
     setIsProcessing(true);
     setPdfDownloadUrl(null); 
-    
+    setHasDownloaded(false);
     setStatusMessage('Generating PDF...');
     
-    // 2. Generate PDF
-    setPrintableSignature(signatureDataUrl);
-    
-    // Allow React to render the printable view before capturing
-    setTimeout(async () => {
-        const formContent = document.getElementById('printable-form-content');
-        const termsContent = document.getElementById('printable-terms-container');
-
-        if (!formContent || !termsContent) {
-            console.error("Printable content not found.");
-            setIsProcessing(false);
-            setPrintableSignature(null);
-            return;
-        }
-        
-        try {
-            const { jsPDF } = jspdf;
-            const pdf = new jsPDF({ orientation: 'p', unit: 'mm', format: 'a4' });
-            const pdfWidth = pdf.internal.pageSize.getWidth();
-            const pageHeight = pdf.internal.pageSize.getHeight();
-
-            // --- Process Form Content ---
-            const formCanvas = await html2canvas(formContent, { scale: 2, useCORS: true });
-            const formImgData = formCanvas.toDataURL('image/png');
-            const formImgHeight = (formCanvas.height * pdfWidth) / formCanvas.width;
-            
-            let formHeightLeft = formImgHeight;
-            let position = 0;
-            pdf.addImage(formImgData, 'PNG', 0, position, pdfWidth, formImgHeight);
-            formHeightLeft -= pageHeight;
-            
-            while (formHeightLeft > 0) {
-                position -= pageHeight;
-                pdf.addPage();
-                pdf.addImage(formImgData, 'PNG', 0, position, pdfWidth, formImgHeight);
-                formHeightLeft -= pageHeight;
-            }
-
-            // --- Process Terms Content ---
-            pdf.addPage();
-            const termsCanvas = await html2canvas(termsContent, { scale: 2, useCORS: true });
-            const termsImgData = termsCanvas.toDataURL('image/png');
-            const termsImgHeight = (termsCanvas.height * pdfWidth) / termsCanvas.width;
-
-            let termsHeightLeft = termsImgHeight;
-            position = 0; // Reset position for the new page
-            pdf.addImage(termsImgData, 'PNG', 0, position, pdfWidth, termsImgHeight);
-            termsHeightLeft -= pageHeight;
-
-            while (termsHeightLeft > 0) {
-                position -= pageHeight;
-                pdf.addPage();
-                pdf.addImage(termsImgData, 'PNG', 0, position, pdfWidth, termsImgHeight);
-                termsHeightLeft -= pageHeight;
-            }
-    
-            // Generate Blob URL instead of saving immediately
-            const blob = pdf.output('blob');
-            const blobUrl = URL.createObjectURL(blob);
+    try {
+        const blobUrl = await generatePdfBlob();
+        if (blobUrl) {
             setPdfDownloadUrl(blobUrl);
             setShowSuccessPopup(true);
-    
-        } catch (error) {
-          console.error("Error generating PDF:", error);
-          alert("Failed to generate PDF. Please try again.");
-        } finally {
-          setIsProcessing(false);
-          setStatusMessage('');
-          // Do not clear printableSignature here, might be needed if they regenerate? 
-          // Actually, we can clear it, as we stored it in finalSignatureUrl
-          setPrintableSignature(null); 
         }
-    }, 100);
+    } finally {
+        setIsProcessing(false);
+        setStatusMessage('');
+        // Keep printableSignature active so re-generation logic works in popup
+    }
   };
   
-  const saveDataToBackend = async (): Promise<boolean> => {
+  const saveDataToBackend = async (): Promise<string | null> => {
       setIsSavingBackend(true);
       
       const submissionData = {
@@ -599,8 +626,9 @@ const App: React.FC = () => {
         responseText = responseText.trim();
         console.log('Raw Server Response:', responseText);
 
+        let jsonResponse;
         try {
-            const jsonResponse = JSON.parse(responseText);
+            jsonResponse = JSON.parse(responseText);
             if (!response.ok || (jsonResponse.status && jsonResponse.status !== 'success')) {
                 throw new Error(jsonResponse.message || 'Failed to save form data.');
             }
@@ -617,7 +645,11 @@ const App: React.FC = () => {
         }
 
         setIsSaved(true);
-        return true;
+        // Return the hkfId if available
+        if (jsonResponse.hkfId) {
+            return jsonResponse.hkfId;
+        }
+        return "SAVED_NO_ID";
 
     } catch (error) {
         console.error("Submission Error:", error);
@@ -628,7 +660,7 @@ const App: React.FC = () => {
             errorMessage = error.message;
         }
         alert(`Could not save your application to the database.\n\n${errorMessage}\n\nPlease check your internet connection and try again.`);
-        return false;
+        return null;
     } finally {
         setIsSavingBackend(false);
     }
@@ -636,23 +668,40 @@ const App: React.FC = () => {
 
   const handlePopupAction = async (action: 'download' | 'email') => {
       // 1. If not saved yet, try to save first
+      let currentDownloadUrl = pdfDownloadUrl;
+
       if (!isSaved) {
-          const success = await saveDataToBackend();
-          if (!success) {
-              // If save failed, we alert the user (in saveDataToBackend) and stop.
-              // They can try clicking again.
+          const hkfId = await saveDataToBackend();
+          
+          if (!hkfId) {
+              // If save failed, we stop. User already got alert from saveDataToBackend.
               return; 
+          }
+          
+          // 2. If we got an ID, re-generate the PDF with the ID on it
+          if (hkfId && hkfId !== "SAVED_NO_ID") {
+              setReceivedHkfId(hkfId);
+              // Wait for state to update and re-render PrintableView
+              await new Promise(r => setTimeout(r, 100));
+              
+              const newBlobUrl = await generatePdfBlob();
+              if (newBlobUrl) {
+                  currentDownloadUrl = newBlobUrl;
+                  setPdfDownloadUrl(newBlobUrl);
+              }
           }
       }
 
-      // 2. Perform the action
-      if (action === 'download' && pdfDownloadUrl) {
+      // 3. Perform the action
+      if (action === 'download' && currentDownloadUrl) {
           const link = document.createElement('a');
-          link.href = pdfDownloadUrl;
+          link.href = currentDownloadUrl;
           link.download = 'HKF_Membership_Application.pdf';
           document.body.appendChild(link);
           link.click();
           document.body.removeChild(link);
+          // Mark download as complete so step 2 is enabled
+          setHasDownloaded(true);
       } else if (action === 'email') {
           const subject = `Membership Application - ${formData.firstName} ${formData.lastName}`;
           const body = `Dear HKF Team,\n\nPlease find attached my signed membership application form.\n\nRegards,\n${formData.firstName} ${formData.lastName}`;
@@ -662,7 +711,10 @@ const App: React.FC = () => {
 
   return (
     <>
-      {isProcessing && <PrintableView formData={formData} signatureDataUrl={printableSignature} />}
+      {isProcessing && <PrintableView formData={formData} signatureDataUrl={printableSignature} hkfId={receivedHkfId} />}
+      {/* Also render PrintableView if we have a popup and need to regenerate with ID, keeping it hidden but present in DOM */}
+      {!isProcessing && showSuccessPopup && <PrintableView formData={formData} signatureDataUrl={printableSignature} hkfId={receivedHkfId} />}
+
       <div className="min-h-screen bg-gray-100 p-4">
         <div className="max-w-4xl mx-auto text-sm">
           <div id="pdf-content-area">
@@ -861,7 +913,7 @@ const App: React.FC = () => {
                                 {isSavingBackend ? (
                                     <>
                                         <svg className="animate-spin -ml-1 mr-2 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
-                                        Saving...
+                                        Saving & Regenerating PDF...
                                     </>
                                 ) : (
                                     <>
@@ -877,7 +929,7 @@ const App: React.FC = () => {
                         {/* Step 2: Email Button */}
                          <button 
                             onClick={() => handlePopupAction('email')}
-                            disabled={isSavingBackend}
+                            disabled={!hasDownloaded || isSavingBackend}
                             className="w-full inline-flex justify-center items-center gap-2 rounded-md border border-blue-600 shadow-sm px-4 py-3 bg-white text-base font-medium text-blue-600 hover:bg-blue-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 sm:text-sm disabled:bg-gray-100 disabled:text-gray-400 disabled:border-gray-300 disabled:cursor-not-allowed"
                         >
                              {isSavingBackend ? (
