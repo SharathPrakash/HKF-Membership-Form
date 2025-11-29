@@ -2,7 +2,7 @@ import React, { useState, useRef, useEffect, useCallback } from 'react';
 import type { IFormData } from './types';
 import TermsAndConditions from './components/TermsAndConditions';
 import logoHKF from './logo/HKF-W.png';
- // const logoHKF = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' fill='%233B82F6'/%3E%3Ctext x='50' y='62' font-size='40' fill='white' text-anchor='middle' font-family='sans-serif' font-weight='bold'%3EHKF%3C/text%3E%3C/svg%3E";
+// const logoHKF = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' fill='%233B82F6'/%3E%3Ctext x='50' y='62' font-size='40' fill='white' text-anchor='middle' font-family='sans-serif' font-weight='bold'%3EHKF%3C/text%3E%3C/svg%3E";
 
 // Declare global variables from CDN scripts for TypeScript
 declare const jspdf: any;
@@ -51,8 +51,8 @@ const PrintableView: React.FC<{ formData: IFormData; signatureDataUrl: string | 
                         <h1 className="text-xl sm:text-2xl font-bold text-gray-800">Hamburg Kannada Freunde e.V</h1>
                         <p className="text-md text-blue-600 font-semibold">EINTRITTSFORMULAR / Membership Form</p>
                     </div>
-                    {/* <img src="https://picsum.photos/id/111/80/80" alt="Logo" className="w-20 h-20 rounded-full object-cover mt-4 sm:mt-0" /> */}
-                    <img src={logoHKF} alt="Logo" className="w-20 h-20 rounded-full object-cover mt-4 sm:mt-0" />
+                    {/* Updated Logo Styling for PDF: Fixed 100x100 size */}
+                    <img src={logoHKF} alt="Logo" style={{ width: '100px', height: '100px', objectFit: 'contain' }} className="mt-4 sm:mt-0 flex-shrink-0" />
 
                 </header>
 
@@ -60,7 +60,7 @@ const PrintableView: React.FC<{ formData: IFormData; signatureDataUrl: string | 
                     {/* Highlighted Membership Number Box */}
                     {hkfId && (
                         <div className="border-2 border-red-500 bg-red-50 rounded-lg p-3 text-center mb-2 shadow-sm flex flex-col items-center justify-center">
-                            <span className="text-red-600 font-bold text-sm tracking-widest">Hamburg Kannada Freunde e.V. - Membership Number</span>
+                            <span className="text-red-600 font-bold text-sm uppercase tracking-widest">Membership Number</span>
                             <span className="text-red-800 font-extrabold text-2xl tracking-wide">{hkfId}</span>
                         </div>
                     )}
@@ -724,8 +724,8 @@ const App: React.FC = () => {
                   <h1 className="text-xl sm:text-2xl font-bold text-gray-800">Hamburg Kannada Freunde e.V</h1>
                   <p className="text-md text-blue-600 font-semibold">EINTRITTSFORMULAR / Membership Form</p>
                 </div>
-                {/* <img src="https://picsum.photos/id/111/80/80" alt="Logo" className="w-20 h-20 rounded-full object-cover mt-4 sm:mt-0" /> */}
-                <img src={logoHKF} alt="Logo" className="w-20 h-20 rounded-full object-cover mt-4 sm:mt-0" />
+                {/* Updated Logo Styling for Main Form: Match PDF styling for consistency */}
+                <img src={logoHKF} alt="Logo" style={{ width: '100px', height: '100px', objectFit: 'contain' }} className="mt-4 sm:mt-0 flex-shrink-0" />
               </header>
 
               <main className="pt-3 space-y-3">
