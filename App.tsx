@@ -60,7 +60,7 @@ const PrintableView: React.FC<{ formData: IFormData; signatureDataUrl: string | 
                     {/* Highlighted Membership Number Box */}
                     {hkfId && (
                         <div className="border-2 border-red-500 bg-red-50 rounded-lg p-3 text-center mb-2 shadow-sm flex flex-col items-center justify-center">
-                            <span className="text-red-600 font-bold text-sm uppercase tracking-widest">Membership Number</span>
+                            <span className="text-red-600 font-bold text-sm tracking-widest">Hamburg Kannada Freunde e.V. - Membership Number</span>
                             <span className="text-red-800 font-extrabold text-2xl tracking-wide">{hkfId}</span>
                         </div>
                     )}
